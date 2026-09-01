@@ -1,0 +1,674 @@
+@import 'tailwindcss';
+
+@theme {
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-arabic: 'Amiri', 'Geeza Pro', 'Noto Naskh Arabic', serif;
+}
+
+/*
+ * Sky colours are written from JS as a continuous function of the sun's real
+ * altitude (see lib/sky.ts). Only the readable UI colours live here, in two
+ * sets, because fading ink from white to black would spend a minute unreadable
+ * in the middle. The flip happens with the sun low, and transitions cross-fade.
+ */
+:root {
+  --sky-top: #04060d;
+  --sky-bottom: #0c1322;
+  --glow: #1b2846;
+  --sun-core: #e6ecff;
+  --sun-halo: #8fa8de;
+  --sun-x: 50%;
+  --sun-y: 30%;
+  --star-opacity: 1;
+  --sun-opacity: 0;
+  --horizon-heat: 0;
+
+  --ink: #f2f6ff;
+  --ink-dim: #a5b2ca;
+  --ink-faint: #6e7b95;
+  --accent: #9fc0ff;
+  --accent-soft: #4a6a9e;
+  --on-accent: #08101f;
+  --card: rgb(10 16 30 / 0.34);
+  --card-line: rgb(255 255 255 / 0.15);
+  --scrim: rgb(4 8 18 / 0.46);
+  /* The dock sits over live content, so it needs more body than a card. */
+  --dock: rgb(16 22 38 / 0.72);
+}
+
+:root[data-ui='light'] {
+  --ink: #0e1a28;
+  --ink-dim: #3d5064;
+  --ink-faint: #6a7b8e;
+  --accent: #0f4c8a;
+  --accent-soft: #7ba3ce;
+  --on-accent: #ffffff;
+  --card: rgb(255 255 255 / 0.62);
+  --card-line: rgb(12 30 52 / 0.14);
+  --scrim: rgb(233 242 252 / 0.56);
+  --dock: rgb(246 250 255 / 0.8);
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/*
+ * No zooming. The viewport meta stops the pinch on most browsers, but iOS
+ * Safari ignores user-scalable and still double-tap-zooms, so the gesture is
+ * refused here as well. `touch-action: manipulation` is what kills the
+ * double-tap without also killing scrolling.
+ */
+html {
+  /* Claim the vertical overscroll so the rubber band can use it instead of
+     Android's pull-to-refresh. iOS keeps its own, better, native bounce. */
+  overscroll-behavior-y: contain;
+  touch-action: manipulation;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-sans);
+  color: var(--ink);
+  background: var(--sky-bottom);
+  -webkit-font-smoothing: antialiased;
+  transition:
+    color 2.5s ease,
+    background-color 2.5s ease;
+}
+
+.sky {
+  background: linear-gradient(180deg, var(--sky-top) 0%, var(--sky-bottom) 100%);
+  transition: background 4s linear;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--card-line);
+  backdrop-filter: blur(30px) saturate(165%);
+  -webkit-backdrop-filter: blur(30px) saturate(165%);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.1),
+    0 8px 30px rgb(0 0 0 / 0.14);
+  transition:
+    background-color 2.5s ease,
+    border-color 2.5s ease;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+}
+
+.arabic {
+  font-family: var(--font-arabic);
+  direction: rtl;
+}
+
+/* ---------- clock faces ---------- */
+
+.clock-light {
+  font-size: clamp(2.9rem, 12vw, 3.75rem);
+  font-weight: 200;
+  letter-spacing: -0.02em;
+}
+
+.clock-serif {
+  font-family: 'Instrument Serif', ui-serif, Georgia, serif;
+  font-size: clamp(3.4rem, 15vw, 4.6rem);
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+
+.clock-mono {
+  font-family: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, monospace;
+  font-size: clamp(2.3rem, 9.5vw, 3rem);
+  font-weight: 500;
+  letter-spacing: -0.045em;
+}
+
+.clock-words {
+  font-size: clamp(2rem, 8.5vw, 2.6rem);
+  font-weight: 300;
+  letter-spacing: -0.015em;
+}
+
+.clock-words .unit {
+  font-size: 0.5em;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--ink-dim);
+}
+
+.clock-target {
+  font-size: clamp(3rem, 13vw, 4rem);
+  font-weight: 300;
+  letter-spacing: -0.02em;
+}
+
+/* Miniature of each face, so the choice is visible before it is made. */
+.clock-preview-light { font-size: 1.15rem; font-weight: 200; }
+.clock-preview-serif { font-family: 'Instrument Serif', ui-serif, Georgia, serif; font-size: 1.35rem; }
+.clock-preview-mono { font-family: ui-monospace, 'SF Mono', Menlo, monospace; font-size: 1rem; letter-spacing: -0.04em; }
+.clock-preview-words { font-size: 1rem; font-weight: 300; }
+.clock-preview-target { font-size: 1.2rem; font-weight: 300; }
+
+/* ---------- the sliding glass lens ---------- */
+
+.segmented {
+  /* The tab bar scrolls when there are more sections than fit; the bar itself
+     is the affordance, a scrollbar through the glass is not. */
+  scrollbar-width: none;
+  /*
+   * The lens is dragged horizontally, so the browser must not claim the
+   * gesture first. Without this, iOS Safari swallows the drag as a scroll and
+   * the lens cannot be picked up at all — it worked on Android and did nothing
+   * on iPhone.
+   */
+  touch-action: pan-y;
+  /* Keep the lens's backdrop-filter from reaching the labels. */
+  isolation: isolate;
+  background: var(--card);
+  border: 1px solid var(--card-line);
+  backdrop-filter: blur(22px) saturate(150%);
+  -webkit-backdrop-filter: blur(22px) saturate(150%);
+}
+
+.segmented::-webkit-scrollbar {
+  display: none;
+}
+
+/*
+ * Actual glass, not a white pill. The body is almost clear — what you see is
+ * mostly the sky behind it, magnified slightly by the backdrop filter. The
+ * form comes from the edges: a bright rim catching light at the top, a thin
+ * dark refraction line inside it, and a shadow underneath lifting it off the
+ * bar. Barely any fill at all.
+ */
+/*
+ * The labels sit in their own layer above the lens. On iOS a backdrop-filter
+ * pulls later siblings into its own compositing pass, which blurred the very
+ * word the lens was sitting on; promoting the labels keeps them crisp.
+ */
+.segmented-label {
+  position: relative;
+  z-index: 1;
+  transform: translateZ(0);
+  white-space: nowrap;
+  border-radius: 999px;
+  font-weight: 500;
+  transition: color 0.3s ease;
+}
+
+.segmented-lens {
+  z-index: 0;
+  position: absolute;
+  top: 3px;
+  left: 0;
+  bottom: 3px;
+  border-radius: 999px;
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    rgb(255 255 255 / 0.16) 0%,
+    rgb(255 255 255 / 0.03) 42%,
+    rgb(255 255 255 / 0.09) 100%
+  );
+  border: 1px solid rgb(255 255 255 / 0.34);
+  box-shadow:
+    /* the lit top edge */
+    inset 0 1.5px 0.5px rgb(255 255 255 / 0.6),
+    /* refraction just inside the rim */
+    inset 0 0 0 1px rgb(255 255 255 / 0.08),
+    inset 0 -2px 3px rgb(0 0 0 / 0.2),
+    /* thickness, and the shadow it casts on the bar */
+    0 1px 0 rgb(255 255 255 / 0.12),
+    0 4px 14px rgb(0 0 0 / 0.28);
+  backdrop-filter: blur(1px) saturate(210%) brightness(1.16) contrast(1.05);
+  -webkit-backdrop-filter: blur(1px) saturate(210%) brightness(1.16) contrast(1.05);
+  transition:
+    transform 0.44s cubic-bezier(0.32, 1.42, 0.5, 1),
+    width 0.44s cubic-bezier(0.32, 1.42, 0.5, 1),
+    box-shadow 0.2s ease;
+}
+
+/* Under the finger it tracks instantly and lifts a little higher. */
+.segmented-lens.is-dragging {
+  transition: width 0.2s ease, box-shadow 0.2s ease;
+  box-shadow:
+    inset 0 1.5px 0.5px rgb(255 255 255 / 0.7),
+    inset 0 0 0 1px rgb(255 255 255 / 0.1),
+    inset 0 -2px 3px rgb(0 0 0 / 0.22),
+    0 1px 0 rgb(255 255 255 / 0.14),
+    0 8px 22px rgb(0 0 0 / 0.34);
+}
+
+:root[data-ui='light'] .segmented-lens {
+  background: linear-gradient(
+    180deg,
+    rgb(255 255 255 / 0.4) 0%,
+    rgb(255 255 255 / 0.14) 42%,
+    rgb(255 255 255 / 0.3) 100%
+  );
+  border-color: rgb(255 255 255 / 0.75);
+  box-shadow:
+    inset 0 1.5px 0.5px rgb(255 255 255 / 0.95),
+    inset 0 0 0 1px rgb(255 255 255 / 0.35),
+    inset 0 -2px 3px rgb(12 30 52 / 0.12),
+    0 1px 0 rgb(255 255 255 / 0.5),
+    0 4px 14px rgb(12 30 52 / 0.18);
+}
+
+:root[data-ui='light'] .segmented-lens.is-dragging {
+  box-shadow:
+    inset 0 1.5px 0.5px rgb(255 255 255 / 1),
+    inset 0 0 0 1px rgb(255 255 255 / 0.4),
+    inset 0 -2px 3px rgb(12 30 52 / 0.14),
+    0 1px 0 rgb(255 255 255 / 0.55),
+    0 8px 22px rgb(12 30 52 / 0.24);
+}
+
+/* ---------- bottom navigation ---------- */
+
+.tabbar-dock {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 30;
+  display: flex;
+  justify-content: center;
+  padding: 0 1rem calc(0.6rem + env(safe-area-inset-bottom));
+  pointer-events: none;
+}
+
+.tabbar {
+  position: relative;
+  display: flex;
+  isolation: isolate;
+  width: 100%;
+  max-width: 26rem;
+  padding: 0.35rem;
+  border-radius: 1.55rem;
+  pointer-events: auto;
+  /* Opaque enough to read against anything: the blur is an enhancement, not
+     the thing keeping the labels legible. */
+  background: var(--dock);
+  border: 1px solid var(--card-line);
+  backdrop-filter: blur(30px) saturate(170%);
+  -webkit-backdrop-filter: blur(30px) saturate(170%);
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.14),
+    0 10px 34px rgb(0 0 0 / 0.34);
+  /* The fold is a width change on this same element, so the glass stretches
+     and squeezes rather than being swapped for a different shape. */
+  transition:
+    max-width 0.52s cubic-bezier(0.32, 1.3, 0.44, 1),
+    padding 0.52s cubic-bezier(0.32, 1.3, 0.44, 1);
+}
+
+.tabbar.is-collapsed {
+  max-width: 7.5rem;
+}
+
+/* The lens is a pill inside the dock, so it needs the dock's radius, not a
+   circle's — otherwise it reads as a capsule floating in a rectangle. */
+.tabbar .segmented-lens {
+  top: 0.35rem;
+  bottom: 0.35rem;
+  border-radius: 1.2rem;
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 0.26) 0%, rgb(255 255 255 / 0.05) 46%, rgb(255 255 255 / 0.14) 100%);
+  border: 1px solid rgb(255 255 255 / 0.4);
+  box-shadow:
+    /* the lit top edge, where light enters the glass */
+    inset 0 1.5px 0.5px rgb(255 255 255 / 0.72),
+    /* the refracting inner wall */
+    inset 0 0 0 1px rgb(255 255 255 / 0.1),
+    inset 0 -2px 4px rgb(0 0 0 / 0.2),
+    /* thickness, then the caustic it throws on the dock beneath */
+    0 1px 0 rgb(255 255 255 / 0.16),
+    0 6px 18px rgb(0 0 0 / 0.3);
+  backdrop-filter: blur(2px) saturate(230%) brightness(1.22) contrast(1.06);
+  -webkit-backdrop-filter: blur(2px) saturate(230%) brightness(1.22) contrast(1.06);
+  /* Overshoot on arrival: the jump between pages is the whole point. */
+  transition:
+    transform 0.5s cubic-bezier(0.34, 1.48, 0.5, 1),
+    width 0.5s cubic-bezier(0.34, 1.48, 0.5, 1),
+    left 0.5s cubic-bezier(0.34, 1.48, 0.5, 1),
+    right 0.5s cubic-bezier(0.34, 1.48, 0.5, 1);
+}
+
+/* A highlight that slides across the lens as it travels, like light rolling
+   over a curved surface. */
+.tabbar .segmented-lens::after {
+  content: '';
+  position: absolute;
+  inset: 1px 1px auto 1px;
+  height: 42%;
+  border-radius: 1.2rem 1.2rem 60% 60% / 1.2rem 1.2rem 100% 100%;
+  background: linear-gradient(180deg, rgb(255 255 255 / 0.3), transparent);
+  pointer-events: none;
+}
+
+:root[data-ui='light'] .tabbar .segmented-lens {
+  background:
+    linear-gradient(180deg, rgb(255 255 255 / 0.72) 0%, rgb(255 255 255 / 0.3) 46%, rgb(255 255 255 / 0.5) 100%);
+  border-color: rgb(255 255 255 / 0.9);
+  box-shadow:
+    inset 0 1.5px 0.5px rgb(255 255 255 / 1),
+    inset 0 0 0 1px rgb(255 255 255 / 0.5),
+    inset 0 -2px 4px rgb(12 30 52 / 0.12),
+    0 1px 0 rgb(255 255 255 / 0.6),
+    0 6px 18px rgb(12 30 52 / 0.2);
+}
+
+.tabbar-item {
+  white-space: nowrap;
+  position: relative;
+  z-index: 1;
+  transform: translateZ(0);
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.5rem 0.25rem 0.45rem;
+  border-radius: 1.2rem;
+  transition: color 0.3s ease;
+}
+
+/* Room for the dock so the last row is never hidden behind it. */
+.page-bottom-space {
+  padding-bottom: calc(5.6rem + env(safe-area-inset-bottom));
+}
+
+/* ---------- the daily card ---------- */
+
+/*
+ * The iOS feel is mostly two things: the whole card gives under the finger, and
+ * new content arrives from slightly below with a spring rather than a fade. No
+ * library — a keyframe and a transform.
+ */
+.widget-press {
+  transition: transform 0.34s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.widget-press:active {
+  transform: scale(0.975);
+}
+
+.widget-enter {
+  animation: widget-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes widget-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.985);
+    filter: blur(3px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: blur(0);
+  }
+}
+
+/* ---------- the qibla ---------- */
+
+.qibla-stage {
+  position: relative;
+  width: min(78vw, 24rem);
+  height: min(78vw, 24rem);
+  display: grid;
+  place-items: center;
+}
+
+.qibla-face {
+  width: 100%;
+  height: 100%;
+  display: block;
+  filter: drop-shadow(0 10px 34px rgb(0 0 0 / 0.24));
+}
+
+/* The reading sits in the well of the dial, under the needle's pivot. */
+.qibla-readout {
+  position: absolute;
+  top: 70%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  pointer-events: none;
+}
+
+.qibla-degrees {
+  font-size: clamp(2rem, 9vw, 2.6rem);
+  font-weight: 300;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+
+/* A quiet confirmation when the needle actually lines up with the Kaaba. */
+.qibla-stage.is-aligned .qibla-face {
+  filter: drop-shadow(0 10px 34px rgb(0 0 0 / 0.24))
+    drop-shadow(0 0 18px color-mix(in srgb, var(--accent) 55%, transparent));
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .qibla-stage.is-aligned {
+    animation: qibla-lock 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+}
+
+@keyframes qibla-lock {
+  0% { transform: scale(1); }
+  45% { transform: scale(1.025); }
+  100% { transform: scale(1); }
+}
+
+/* ---------- the sun ---------- */
+
+.sky-parallax {
+  position: absolute;
+  inset: 0;
+  will-change: transform;
+}
+
+.sun-stage {
+  position: absolute;
+  left: var(--sun-x);
+  top: var(--sun-y);
+  transform: translate(-50%, -50%);
+  opacity: var(--sun-opacity);
+  transition: opacity 4s ease;
+}
+
+/* Matches the 30s position tick, so the arc is continuous rather than steppy.
+   Applied only after the first paint. */
+.sun-stage.is-tracking {
+  transition:
+    left 30s linear,
+    top 30s linear,
+    opacity 4s ease;
+}
+
+.sun-atmosphere,
+.sun-corona,
+.sun-disc {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.sun-atmosphere {
+  width: 130vmin;
+  height: 130vmin;
+  background: radial-gradient(circle, var(--sun-halo) 0%, transparent 62%);
+  opacity: 0.34;
+}
+
+.sun-corona {
+  width: 34vmin;
+  height: 34vmin;
+  background: radial-gradient(
+    circle,
+    var(--sun-core) 0%,
+    var(--sun-halo) 34%,
+    transparent 70%
+  );
+  opacity: 0.72;
+  animation: breathe 9s ease-in-out infinite;
+  will-change: transform;
+}
+
+.sun-disc {
+  width: 10vmin;
+  height: 10vmin;
+  overflow: visible;
+  filter: drop-shadow(0 0 6vmin var(--sun-halo));
+}
+
+.sun-body,
+.moon-body {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+@keyframes breathe {
+  0%,
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 0.72;
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(1.07);
+    opacity: 0.86;
+  }
+}
+
+/* ---------- night ---------- */
+
+/* Left and low: at the top right it landed on the Adhan/Iqama control and read
+   as the switch's knob rather than as the sky. */
+.moon {
+  position: absolute;
+  left: 9%;
+  top: 29%;
+  transition: opacity 4s ease;
+}
+
+.moon-disc {
+  /* Big enough for the maria and the phase to actually read. */
+  width: 9.5vmin;
+  height: 9.5vmin;
+  filter: drop-shadow(0 0 3.5vmin rgb(180 205 255 / 0.3));
+}
+
+.star-field {
+  opacity: var(--star-opacity);
+  transition: opacity 4s ease;
+}
+
+/* The sun tracks across the whole sky, so it will pass behind the countdown
+   around mid-morning and mid-afternoon. This keeps the type readable without
+   confining the sun to a decorative strip at the top. */
+.content-scrim {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(115% 55% at 50% 42%, var(--scrim) 0%, transparent 72%);
+  transition: background 2.5s ease;
+}
+
+.horizon-haze {
+  position: absolute;
+  inset: 48% 0 0 0;
+  background: linear-gradient(to bottom, transparent 0%, var(--glow) 88%);
+  opacity: calc(var(--horizon-heat) * 0.4);
+  transition: opacity 4s ease;
+}
+
+@keyframes twinkle {
+  0%,
+  100% {
+    opacity: 0.25;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.rise {
+  animation: rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+input[type='range'] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 2px;
+  background: var(--card-line);
+  border-radius: 999px;
+  outline: none;
+}
+
+input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: grab;
+  border: none;
+}
+
+input[type='range']::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  cursor: grab;
+  border: none;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgb(128 128 128 / 0.35);
+  border-radius: 999px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Miqāt · analytics</title>
+    <style>
+      :root {
+        --bg: #0a0e17;
+        --panel: #121826;
+        --line: #1e273a;
+        --ink: #eef2fb;
+        --dim: #8d9bb5;
+        --faint: #5b6880;
+        --accent: #8fb4ff;
+        --warm: #ffb87a;
+        --good: #6ee7a8;
+      }
+      * { box-sizing: border-box; margin: 0; }
+      body {
+        background: var(--bg); color: var(--ink); font: 14px/1.55 ui-sans-serif, -apple-system, 'Segoe UI', sans-serif;
+        padding: 32px; max-width: 1180px; margin: 0 auto;
+      }
+      h1 { font-size: 20px; letter-spacing: -0.01em; }
+      h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.09em; color: var(--faint); margin-bottom: 12px; font-weight: 600; }
+      header { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 6px; }
+      .sub { color: var(--dim); font-size: 13px; margin-bottom: 26px; }
+      select { background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 9px; padding: 7px 11px; font: inherit; }
+      .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 30px; }
+      .tile { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 16px 18px; }
+      .tile .n { font-size: 27px; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+      .tile .l { color: var(--faint); font-size: 12px; margin-top: 3px; }
+      section { margin-bottom: 30px; }
+      table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+      th { text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: 0.07em; color: var(--faint); font-weight: 600; padding-bottom: 8px; }
+      td { padding: 9px 0; border-top: 1px solid var(--line); }
+      td.n, th.n { text-align: right; }
+      .muted { color: var(--dim); }
+      .bar { height: 5px; background: var(--accent); border-radius: 3px; opacity: .8; }
+      .chart { display: flex; align-items: flex-end; gap: 3px; height: 90px; }
+      .chart div { flex: 1; background: var(--accent); border-radius: 3px 3px 0 0; min-height: 2px; opacity: .75; }
+      .map { position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; height: 340px; overflow: hidden; }
+      .map svg { width: 100%; height: 100%; }
+      .pin { fill: var(--warm); opacity: .85; }
+      .empty { color: var(--faint); padding: 22px 0; }
+      .pill { font-size: 11px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); color: var(--dim); }
+      .yes { color: var(--good); border-color: rgb(110 231 168 / .35); }
+      footer { color: var(--faint); font-size: 12px; border-top: 1px solid var(--line); padding-top: 16px; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Miqāt · analytics</h1>
+      <select id="range">
+        <option value="7">Last 7 days</option>
+        <option value="30">Last 30 days</option>
+        <option value="90" selected>Last 90 days</option>
+        <option value="3650">All time</option>
+      </select>
+    </header>
+    <p class="sub" id="sub">Loading…</p>
+
+    <div class="tiles" id="tiles"></div>
+
+    <section>
+      <h2>New visitors per day</h2>
+      <div class="chart" id="chart"></div>
+    </section>
+
+    <section>
+      <h2>Where they are — precise fixes, from people who allowed it</h2>
+      <div class="map" id="map"></div>
+    </section>
+
+    <section>
+      <h2>Places</h2>
+      <table id="places"></table>
+    </section>
+
+    <section>
+      <h2>Countries</h2>
+      <table id="countries"></table>
+    </section>
+
+    <section>
+      <h2>Recent visitors</h2>
+      <table id="recent"></table>
+    </section>
+
+    <footer>
+      Served from your own Mac on the loopback address. Nothing here is exposed to the network,
+      and there is no Miqāt account.
+    </footer>
+
+    <script>
+      const el = (id) => document.getElementById(id);
+      const fmt = (n) => (n ?? 0).toLocaleString();
+
+      function tiles(t) {
+        const items = [
+          ['Visitors', t.visitors],
+          ['Visits', t.visits],
+          ['Sharing location', t.sharingLocation],
+          ['Active, last 7d', t.activeLast7Days],
+          ['New, last 7d', t.newLast7Days],
+          ['Installed', t.installed],
+        ];
+        el('tiles').innerHTML = items
+          .map(([label, n]) => `<div class="tile"><div class="n">${fmt(n)}</div><div class="l">${label}</div></div>`)
+          .join('');
+      }
+
+      function chart(daily) {
+        if (!daily.length) { el('chart').innerHTML = '<p class="empty">No visits yet.</p>'; return; }
+        const max = Math.max(...daily.map((d) => d.newVisitors), 1);
+        el('chart').innerHTML = daily
+          .map((d) => `<div style="height:${(d.newVisitors / max) * 100}%" title="${d.day}: ${d.newVisitors}"></div>`)
+          .join('');
+      }
+
+      // Equirectangular is enough to see clustering; this is not a navigation chart.
+      function map(fixes) {
+        if (!fixes.length) {
+          el('map').innerHTML = '<p class="empty" style="padding:22px">Nobody has shared a precise location yet.</p>';
+          return;
+        }
+        const pins = fixes
+          .map((f) => {
+            const x = ((f.longitude + 180) / 360) * 100;
+            const y = ((90 - f.latitude) / 180) * 100;
+            return `<circle class="pin" cx="${x}" cy="${y}" r="0.55"><title>${f.city ?? ''} ${f.latitude.toFixed(3)}, ${f.longitude.toFixed(3)}</title></circle>`;
+          })
+          .join('');
+        el('map').innerHTML =
+          `<svg viewBox="0 0 100 100" preserveAspectRatio="none">
+             <rect width="100" height="100" fill="none"/>
+             ${[...Array(11)].map((_, i) => `<line x1="0" y1="${i * 10}" x2="100" y2="${i * 10}" stroke="#1e273a" stroke-width="0.12"/>`).join('')}
+             ${[...Array(13)].map((_, i) => `<line x1="${i * 8.33}" y1="0" x2="${i * 8.33}" y2="100" stroke="#1e273a" stroke-width="0.12"/>`).join('')}
+             ${pins}
+           </svg>`;
+      }
+
+      function table(id, rows, columns) {
+        if (!rows.length) { el(id).innerHTML = '<tr><td class="empty">Nothing yet.</td></tr>'; return; }
+        const head = columns.map((c) => `<th class="${c.n ? 'n' : ''}">${c.label}</th>`).join('');
+        const body = rows
+          .map((r) => `<tr>${columns.map((c) => `<td class="${c.n ? 'n' : ''}">${c.get(r)}</td>`).join('')}</tr>`)
+          .join('');
+        el(id).innerHTML = `<thead><tr>${head}</tr></thead><tbody>${body}</tbody>`;
+      }
+
+      async function load() {
+        const days = el('range').value;
+        el('sub').textContent = 'Loading…';
+        const response = await fetch(`/data?days=${days}`);
+        const data = await response.json();
+        if (data.error) { el('sub').textContent = data.error; return; }
+
+        el('sub').textContent = `Generated ${new Date(data.generatedAt).toLocaleString()}`;
+        tiles(data.totals);
+        chart(data.daily);
+        map(data.fixes);
+
+        table('places', data.places, [
+          { label: 'City', get: (r) => r.city + (r.region ? ` <span class="muted">· ${r.region}</span>` : '') },
+          { label: 'Country', get: (r) => r.country },
+          { label: 'Visitors', n: true, get: (r) => fmt(r.visitors) },
+          { label: 'Visits', n: true, get: (r) => fmt(r.visits) },
+        ]);
+
+        const top = Math.max(...data.countries.map((c) => c.visitors), 1);
+        table('countries', data.countries, [
+          { label: 'Country', get: (r) => r.country },
+          { label: '', get: (r) => `<div class="bar" style="width:${(r.visitors / top) * 100}%"></div>` },
+          { label: 'Visitors', n: true, get: (r) => fmt(r.visitors) },
+        ]);
+
+        table('recent', data.recent, [
+          { label: 'City', get: (r) => r.city ?? '—' },
+          { label: 'Country', get: (r) => r.country ?? '—' },
+          { label: 'Device', get: (r) => r.platform ?? '—' },
+          { label: 'Method', get: (r) => r.method ?? '—' },
+          { label: 'Location', get: (r) => (r.sharingLocation ? '<span class="pill yes">shared</span>' : '<span class="pill">no</span>') },
+          { label: 'Visits', n: true, get: (r) => fmt(r.visits) },
+          { label: 'Last seen', n: true, get: (r) => new Date(r.lastSeen).toLocaleString() },
+        ]);
+      }
+
+      el('range').addEventListener('change', load);
+      load();
+      setInterval(load, 60000);
+    </script>
+  </body>
+</html>

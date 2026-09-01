@@ -1,0 +1,32 @@
+{
+  "name": "miqat",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && tsc --noEmit -p tsconfig.api.json && node scripts/build-functions.mjs && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -b && tsc --noEmit -p tsconfig.api.json",
+    "verify": "vite build --ssr scripts/verify.ts --outDir .tmp-verify --logLevel error && node .tmp-verify/verify.js",
+    "build:functions": "node scripts/build-functions.mjs",
+    "analytics": "node tools/analytics/serve.mjs",
+    "build:timetable": "vite build --ssr scripts/build-timetable.ts --outDir .tmp-verify --logLevel error && node .tmp-verify/build-timetable.js"
+  },
+  "dependencies": {
+    "adhan": "^4.4.3",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "zustand": "^5.0.3"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.1.0",
+    "@types/node": "^22.13.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@vitejs/plugin-react": "^4.4.0",
+    "tailwindcss": "^4.1.0",
+    "typescript": "~5.7.0",
+    "vite": "^6.2.0"
+  }
+}
