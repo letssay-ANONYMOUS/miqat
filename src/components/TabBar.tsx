@@ -88,6 +88,11 @@ export function TabBar({ page, onChange }: { page: Page; onChange: (page: Page) 
   }, [page, collapsed]);
 
   const select = (id: Page) => {
+    if (collapsed) {
+      haptic('soft');
+      setCollapsed(false);
+      return;
+    }
     haptic('tick');
     if (id === 'times' && page === 'times') {
       setCollapsed(true);
@@ -96,40 +101,24 @@ export function TabBar({ page, onChange }: { page: Page; onChange: (page: Page) 
     onChange(id);
   };
 
-  if (collapsed) {
-    const times = TABS[0];
-    return (
-      <nav className="tabbar-dock">
-        <div className="tabbar is-collapsed" role="tablist" aria-label="Pages">
-          <span aria-hidden="true" className="segmented-lens" style={{ left: 5, right: 5, width: 'auto' }} />
-          <button
-            type="button"
-            aria-label="Open navigation"
-            aria-expanded="false"
-            onClick={() => {
-              haptic('soft');
-              setCollapsed(false);
-            }}
-            className="tabbar-item text-[var(--ink)]"
-          >
-            <svg width="22" height="22" viewBox="0 0 22 22" fill="none" aria-hidden="true">
-              {times.icon}
-            </svg>
-            <span className="text-[10px] font-medium tracking-wide">{times.label}</span>
-          </button>
-        </div>
-      </nav>
-    );
-  }
-
   return (
     <nav className="tabbar-dock">
-      <div ref={container} className="tabbar" role="tablist" aria-label="Pages">
+      <div className="tabbar-rail">
+      <div
+        ref={container}
+        className={`tabbar${collapsed ? ' is-collapsed' : ''}`}
+        role="tablist"
+        aria-label="Pages"
+      >
         {lens && (
           <span
             aria-hidden="true"
             className="segmented-lens"
-            style={{ transform: `translateX(${lens.left}px)`, width: `${lens.width}px` }}
+            style={
+              collapsed
+                ? { transform: 'translateX(0px)', width: 'calc(100% - 10px)', marginLeft: 5 }
+                : { transform: `translateX(${lens.left}px)`, width: `${lens.width}px` }
+            }
           />
         )}
         {TABS.map((tab) => (
@@ -141,7 +130,15 @@ export function TabBar({ page, onChange }: { page: Page; onChange: (page: Page) 
             }}
             role="tab"
             aria-selected={page === tab.id}
-            aria-label={tab.id === 'times' && page === 'times' ? 'Collapse navigation' : tab.label}
+            aria-hidden={collapsed && tab.id !== 'times'}
+            tabIndex={collapsed && tab.id !== 'times' ? -1 : undefined}
+            aria-label={
+              collapsed
+                ? 'Open navigation'
+                : tab.id === 'times' && page === 'times'
+                  ? 'Collapse navigation'
+                  : tab.label
+            }
             onClick={() => select(tab.id)}
             className={`tabbar-item ${page === tab.id ? 'text-[var(--ink)]' : 'text-[var(--ink-dim)]'}`}
           >
@@ -151,6 +148,7 @@ export function TabBar({ page, onChange }: { page: Page; onChange: (page: Page) 
             <span className="text-[10px] font-medium tracking-wide">{tab.label}</span>
           </button>
         ))}
+      </div>
       </div>
     </nav>
   );

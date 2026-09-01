@@ -290,6 +290,18 @@ body {
   pointer-events: none;
 }
 
+/*
+ * The rail holds the dock's full width even while the bar inside it is folded,
+ * so the bar shrinks toward its own left edge instead of collapsing inward
+ * from both sides. On a wide screen the rail stays centred with the content.
+ */
+.tabbar-rail {
+  display: flex;
+  justify-content: flex-start;
+  width: 100%;
+  max-width: 26rem;
+}
+
 .tabbar {
   position: relative;
   display: flex;
@@ -298,6 +310,7 @@ body {
   max-width: 26rem;
   padding: 0.35rem;
   border-radius: 1.55rem;
+  overflow: hidden;
   pointer-events: auto;
   /* Opaque enough to read against anything: the blur is an enhancement, not
      the thing keeping the labels legible. */
@@ -308,15 +321,30 @@ body {
   box-shadow:
     inset 0 1px 0 rgb(255 255 255 / 0.14),
     0 10px 34px rgb(0 0 0 / 0.34);
-  /* The fold is a width change on this same element, so the glass stretches
-     and squeezes rather than being swapped for a different shape. */
+  /*
+   * The fold is a width change on this same element, so the glass stretches
+   * and squeezes rather than being swapped for a different shape. Unhurried on
+   * purpose — a fast spring on a large object reads as cheap; a longer travel
+   * with a gentle settle reads as weight.
+   */
   transition:
-    max-width 0.52s cubic-bezier(0.32, 1.3, 0.44, 1),
-    padding 0.52s cubic-bezier(0.32, 1.3, 0.44, 1);
+    max-width 0.72s cubic-bezier(0.22, 1.06, 0.32, 1),
+    padding 0.72s cubic-bezier(0.22, 1.06, 0.32, 1);
 }
 
 .tabbar.is-collapsed {
   max-width: 7.5rem;
+}
+
+/* Folded, the other three fold away to nothing and the first takes the width.
+   Clipped by the bar so they disappear behind its own edge as it closes. */
+.tabbar.is-collapsed .tabbar-item:not(:first-child) {
+  flex: 0 0 0;
+  min-width: 0;
+  padding-left: 0;
+  padding-right: 0;
+  opacity: 0;
+  pointer-events: none;
 }
 
 /* The lens is a pill inside the dock, so it needs the dock's radius, not a
@@ -339,12 +367,13 @@ body {
     0 6px 18px rgb(0 0 0 / 0.3);
   backdrop-filter: blur(2px) saturate(230%) brightness(1.22) contrast(1.06);
   -webkit-backdrop-filter: blur(2px) saturate(230%) brightness(1.22) contrast(1.06);
-  /* Overshoot on arrival: the jump between pages is the whole point. */
+  /* Overshoot on arrival: the jump between pages is the whole point. Slower
+     than the settings lens, because it is travelling further. */
   transition:
-    transform 0.5s cubic-bezier(0.34, 1.48, 0.5, 1),
-    width 0.5s cubic-bezier(0.34, 1.48, 0.5, 1),
-    left 0.5s cubic-bezier(0.34, 1.48, 0.5, 1),
-    right 0.5s cubic-bezier(0.34, 1.48, 0.5, 1);
+    transform 0.62s cubic-bezier(0.28, 1.34, 0.42, 1),
+    width 0.62s cubic-bezier(0.28, 1.34, 0.42, 1),
+    left 0.62s cubic-bezier(0.28, 1.34, 0.42, 1),
+    right 0.62s cubic-bezier(0.28, 1.34, 0.42, 1);
 }
 
 /* A highlight that slides across the lens as it travels, like light rolling
@@ -373,6 +402,11 @@ body {
 
 .tabbar-item {
   white-space: nowrap;
+  transition:
+    color 0.3s ease,
+    opacity 0.34s ease,
+    flex-basis 0.72s cubic-bezier(0.22, 1.06, 0.32, 1),
+    padding 0.72s cubic-bezier(0.22, 1.06, 0.32, 1);
   position: relative;
   z-index: 1;
   transform: translateZ(0);
