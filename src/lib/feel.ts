@@ -63,6 +63,7 @@ export function useRubberBand(
     };
 
     const onMove = (event: TouchEvent) => {
+      if (document.body.classList.contains('reading-mushaf')) return;
       const dy = event.touches[0].clientY - startY;
       const top = scrollTop();
       const limit = maxScroll();

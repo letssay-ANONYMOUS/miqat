@@ -1,21 +1,21 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   RECITERS,
-  ayahAudioUrl,
-  globalAyahNumber,
   loadQuran,
   reciterById,
   type QuranBundle,
   type ReciterId,
   type Surah,
 } from '../lib/quran';
+import { playAyah, stopAyah } from '../lib/recite';
 import { useStore } from '../lib/store';
 
-export function QuranPage() {
+export function QuranPage({ onReading }: { onReading?: (reading: boolean) => void }) {
   const [data, setData] = useState<QuranBundle | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState<{ surah: number; ayah: number } | null>(null);
+  const [leaving, setLeaving] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -46,7 +46,16 @@ export function QuranPage() {
         data={data}
         surah={surah}
         startAyah={open.ayah}
-        onBack={() => setOpen(null)}
+        leaving={leaving}
+        onReading={onReading}
+        onBack={() => {
+          setLeaving(true);
+          window.setTimeout(() => {
+            setLeaving(false);
+            setOpen(null);
+            window.scrollTo(0, 0);
+          }, 280);
+        }}
         onOpen={(n) => setOpen({ surah: n, ayah: 1 })}
       />
     );
@@ -89,7 +98,7 @@ function Index({
   const marked = bookmark ? data.surahs[bookmark.surah - 1] : null;
 
   return (
-    <section className="flex flex-1 flex-col py-3">
+    <section className="quran-index flex flex-1 flex-col py-3">
       <header className="px-1">
         <h1 className="text-2xl font-semibold tracking-tight">Qur’an</h1>
         <p className="mt-1 text-[13px] leading-relaxed text-[var(--ink-dim)]">
@@ -158,104 +167,135 @@ function Reader({
   data,
   surah,
   startAyah,
+  leaving,
   onBack,
   onOpen,
+  onReading,
 }: {
   data: QuranBundle;
   surah: Surah;
   startAyah: number;
+  leaving: boolean;
   onBack: () => void;
   onOpen: (n: number) => void;
+  onReading?: (reading: boolean) => void;
 }) {
   const { quranReciter, setQuranReciter, setQuranBookmark } = useStore();
-  const page = useRef<HTMLDivElement>(null);
-  const audio = useRef<HTMLAudioElement | null>(null);
+  const dragY = useRef(0);
+  const lastScroll = useRef(0);
   const [selected, setSelected] = useState(startAyah);
   const [playing, setPlaying] = useState(false);
-  const playFrom = useRef<{ surah: number; ayah: number } | null>(null);
+  const [tray, setTray] = useState(false);
+  const [chromeOn, setChromeOn] = useState(true);
+  const playAt = useRef<{ surah: number; ayah: number } | null>(null);
 
   const basmala = data.surahs[0].ar[0];
   const showBasmala = surah.n !== 1 && surah.n !== 9;
+  const reciter = reciterById(quranReciter);
 
   useEffect(() => {
+    onReading?.(true);
     document.body.classList.add('reading-mushaf');
-    return () => document.body.classList.remove('reading-mushaf');
-  }, []);
+    document.body.classList.remove('show-app-chrome');
+    const theme = document.querySelector('meta[name="theme-color"]');
+    const prev = theme?.getAttribute('content') ?? '#080c1a';
+    theme?.setAttribute('content', '#f3ead4');
+    return () => {
+      onReading?.(false);
+      document.body.classList.remove('reading-mushaf', 'show-app-chrome');
+      theme?.setAttribute('content', prev);
+      stopAyah();
+    };
+  }, [onReading]);
 
   useEffect(() => {
     setSelected(startAyah);
     setQuranBookmark({ surah: surah.n, ayah: startAyah });
-    const node = page.current?.querySelector(`[data-ayah="${startAyah}"]`);
-    if (startAyah > 1) node?.scrollIntoView({ block: 'center' });
+    if (startAyah > 1) {
+      requestAnimationFrame(() => {
+        document.querySelector(`[data-ayah="${startAyah}"]`)?.scrollIntoView({ block: 'start' });
+      });
+    } else {
+      window.scrollTo(0, 0);
+    }
   }, [surah.n, startAyah, setQuranBookmark]);
 
   useEffect(() => {
-    return () => {
-      audio.current?.pause();
-      audio.current = null;
-    };
-  }, []);
-
-  const reciter = reciterById(quranReciter);
-
-  const play = (s: number, a: number, reciterId: ReciterId = reciter.id) => {
-    const chapter = data.surahs[s - 1];
-    if (!chapter || a < 1 || a > chapter.ar.length) {
-      setPlaying(false);
-      playFrom.current = null;
-      return;
-    }
-    setSelected(a);
-    setQuranBookmark({ surah: s, ayah: a });
-    playFrom.current = { surah: s, ayah: a };
-    const url = ayahAudioUrl(reciterId, globalAyahNumber(data, s, a));
-    if (!audio.current) {
-      audio.current = new Audio();
-      audio.current.preload = 'auto';
-      audio.current.setAttribute('playsinline', '');
-    }
-    const el = audio.current;
-    el.pause();
-    el.src = url;
-    el.onended = () => {
-      const nextA = a + 1;
-      if (nextA <= chapter.ar.length) play(s, nextA, reciterId);
-      else {
-        setPlaying(false);
-        playFrom.current = null;
+    lastScroll.current = window.scrollY;
+    const onScroll = () => {
+      const y = window.scrollY;
+      const dy = y - lastScroll.current;
+      lastScroll.current = y;
+      if (y < 24) {
+        setChromeOn(true);
+        document.body.classList.remove('show-app-chrome');
+        return;
+      }
+      if (dy > 6) {
+        setChromeOn(false);
+        document.body.classList.remove('show-app-chrome');
+      } else if (dy < -6) {
+        setChromeOn(true);
+        document.body.classList.add('show-app-chrome');
       }
     };
-    el.onerror = () => setPlaying(false);
-    void el.play().then(
-      () => setPlaying(true),
-      () => setPlaying(false),
-    );
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
+  const play = (a: number, reciterId: ReciterId = reciter.id) => {
+    setSelected(a);
+    setTray(true);
+    setQuranBookmark({ surah: surah.n, ayah: a });
+    playAt.current = { surah: surah.n, ayah: a };
+    setPlaying(true);
+    void playAyah({
+      reciter: reciterId,
+      surah: surah.n,
+      ayah: a,
+      onEnded: () => {
+        setPlaying(false);
+        playAt.current = null;
+      },
+    }).catch(() => {
+      setPlaying(false);
+      playAt.current = null;
+    });
   };
 
   const stop = () => {
-    audio.current?.pause();
+    stopAyah();
     setPlaying(false);
-    playFrom.current = null;
+    playAt.current = null;
   };
 
   const onReciter = (id: ReciterId) => {
     setQuranReciter(id);
-    if (playing && playFrom.current) {
-      const at = playFrom.current;
-      play(at.surah, at.ayah, id);
-    }
+    if (playing) play(selected, id);
+  };
+
+  const pick = (n: number) => {
+    setSelected(n);
+    setTray(true);
+    setQuranBookmark({ surah: surah.n, ayah: n });
   };
 
   return (
-    <div ref={page} className="mushaf-page">
-      <header className="mushaf-chrome">
+    <div className={`mushaf-page${leaving ? ' is-leaving' : ''}`}>
+      <header className={`mushaf-chrome${chromeOn ? '' : ' is-away'}`}>
         <button type="button" className="mushaf-back" onClick={onBack} aria-label="Surahs">
           ←
         </button>
         <h1 className="arabic mushaf-title">{`سورة ${surah.name}`}</h1>
-        <span className="mushaf-chrome-meta tabular">
-          {surah.n}
-        </span>
+        <button
+          type="button"
+          className="mushaf-recite-toggle"
+          aria-label={tray ? 'Hide reciter' : 'Show reciter'}
+          aria-pressed={tray}
+          onClick={() => setTray((v) => !v)}
+        >
+          {tray ? '✕' : '♪'}
+        </button>
       </header>
 
       <div className="mushaf-sheet">
@@ -275,15 +315,18 @@ function Reader({
                 ? raw.slice(basmala.length).trim()
                 : raw;
             const on = selected === n;
-            const now = playing && playFrom.current?.surah === surah.n && playFrom.current.ayah === n;
+            const now = playing && playAt.current?.ayah === n;
             return (
               <span
                 key={n}
                 data-ayah={n}
                 className={`mushaf-ayah${on ? ' is-on' : ''}${now ? ' is-playing' : ''}`}
-                onClick={() => {
-                  setSelected(n);
-                  setQuranBookmark({ surah: surah.n, ayah: n });
+                onPointerDown={(e) => {
+                  dragY.current = e.clientY;
+                }}
+                onPointerUp={(e) => {
+                  if (Math.abs(e.clientY - dragY.current) > 10) return;
+                  pick(n);
                 }}
               >
                 {ar}
@@ -313,6 +356,7 @@ function Reader({
         </nav>
       </div>
 
+      {tray && (
       <div className="mushaf-tray">
         <div className="mushaf-tray-row">
           <p className="tabular text-[12px] text-[#6b5740]">
@@ -336,14 +380,18 @@ function Reader({
           <button
             type="button"
             className="mushaf-play"
-            onClick={() => (playing ? stop() : play(surah.n, selected))}
+            onClick={() => (playing ? stop() : play(selected))}
           >
-            {playing ? 'Pause' : 'Recite'}
+            {playing ? 'Pause' : 'Recite this ayah'}
           </button>
         </div>
         <p className="mushaf-tray-en">{surah.en[selected - 1]}</p>
-        <p className="mushaf-tray-note">Saheeh International · translation, not the Qur’an</p>
+        <p className="mushaf-tray-note">This ayah only · Saheeh International</p>
+        <button type="button" className="mushaf-tray-close" onClick={() => setTray(false)}>
+          Close
+        </button>
       </div>
+      )}
     </div>
   );
 }

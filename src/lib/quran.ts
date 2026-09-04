@@ -26,12 +26,12 @@ export function globalAyahNumber(data: QuranBundle, surah: number, ayah: number)
 }
 
 export const RECITERS = [
-  { id: 'ar.alafasy', name: 'Mishary Alafasy', ar: 'مشاري العفاسي', bit: 128 },
-  { id: 'ar.abdulbasitmurattal', name: 'Abdul Basit', ar: 'عبد الباسط', bit: 192 },
-  { id: 'ar.husary', name: 'Al-Husary', ar: 'الحصري', bit: 128 },
-  { id: 'ar.minshawi', name: 'Al-Minshawi', ar: 'المنشاوي', bit: 128 },
-  { id: 'ar.mahermuaiqly', name: 'Maher Al Muaiqly', ar: 'ماهر المعيقلي', bit: 128 },
-  { id: 'ar.abdurrahmaansudais', name: 'As-Sudais', ar: 'السديس', bit: 192 },
+  { id: 'ar.alafasy', name: 'Mishary Alafasy', ar: 'مشاري العفاسي', folder: 'Alafasy_128kbps' },
+  { id: 'ar.abdulbasitmurattal', name: 'Abdul Basit', ar: 'عبد الباسط', folder: 'Abdul_Basit_Murattal_192kbps' },
+  { id: 'ar.husary', name: 'Al-Husary', ar: 'الحصري', folder: 'Husary_128kbps' },
+  { id: 'ar.minshawi', name: 'Al-Minshawi', ar: 'المنشاوي', folder: 'Minshawy_Murattal_128kbps' },
+  { id: 'ar.mahermuaiqly', name: 'Maher Al Muaiqly', ar: 'ماهر المعيقلي', folder: 'MaherAlMuaiqly128kbps' },
+  { id: 'ar.abdurrahmaansudais', name: 'As-Sudais', ar: 'السديس', folder: 'Abdurrahmaan_As-Sudais_192kbps' },
 ] as const;
 
 export type ReciterId = (typeof RECITERS)[number]['id'];
@@ -40,9 +40,10 @@ export function reciterById(id: string) {
   return RECITERS.find((r) => r.id === id) ?? RECITERS[0];
 }
 
-export function ayahAudioUrl(reciter: ReciterId, global: number): string {
+export function ayahAudioUrl(reciter: ReciterId, surah: number, ayah: number): string {
   const r = reciterById(reciter);
-  return `https://cdn.islamic.network/quran/audio/${r.bit}/${r.id}/${global}.mp3`;
+  const file = `${String(surah).padStart(3, '0')}${String(ayah).padStart(3, '0')}.mp3`;
+  return `https://everyayah.com/data/${r.folder}/${file}`;
 }
 
 let bundle: Promise<QuranBundle> | null = null;

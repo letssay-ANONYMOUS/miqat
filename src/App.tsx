@@ -52,6 +52,7 @@ export default function App() {
   const scroller = useRef<HTMLDivElement>(null);
   useRubberBand(scroller);
   const [page, setPage] = useState<Page>('times');
+  const [quranReading, setQuranReading] = useState(false);
 
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 1000);
@@ -168,13 +169,20 @@ export default function App() {
   const friday = isFriday(days.today, timezone);
 
   return (
-    <div className="sky relative min-h-dvh overflow-hidden">
-      <Sky latitude={place.latitude} longitude={place.longitude} scene={page === 'times'} />
+    <div className={quranReading ? 'mushaf-root' : 'sky relative min-h-dvh overflow-hidden'}>
+      {!quranReading && (
+        <Sky latitude={place.latitude} longitude={place.longitude} scene={page === 'times'} />
+      )}
 
       <div
         ref={scroller}
-        className="relative z-10 mx-auto flex min-h-dvh w-full max-w-2xl flex-col px-4 page-bottom-space pt-[max(0.75rem,env(safe-area-inset-top))] sm:px-5"
+        className={
+          quranReading
+            ? 'relative z-10 w-full'
+            : 'relative z-10 mx-auto flex min-h-dvh w-full max-w-2xl flex-col px-4 page-bottom-space pt-[max(0.75rem,env(safe-area-inset-top))] sm:px-5'
+        }
       >
+        {!quranReading && (
         <header className="flex items-start justify-between gap-2">
           <button
             onClick={() => setSheet('location')}
@@ -208,6 +216,7 @@ export default function App() {
             </IconButton>
           </nav>
         </header>
+        )}
 
         {page === 'times' && (
           <>
@@ -354,8 +363,8 @@ export default function App() {
         )}
 
         {page === 'quran' && (
-          <section className="flex-1 py-2">
-            <QuranPage />
+          <section className={quranReading ? '' : 'flex-1 py-2'}>
+            <QuranPage onReading={setQuranReading} />
           </section>
         )}
 
