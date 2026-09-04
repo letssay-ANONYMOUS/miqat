@@ -1,5 +1,14 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { loadQuran, type QuranBundle, type Surah } from '../lib/quran';
+import {
+  RECITERS,
+  ayahAudioUrl,
+  globalAyahNumber,
+  loadQuran,
+  reciterById,
+  type QuranBundle,
+  type ReciterId,
+  type Surah,
+} from '../lib/quran';
 import { useStore } from '../lib/store';
 
 export function QuranPage() {
@@ -158,106 +167,183 @@ function Reader({
   onBack: () => void;
   onOpen: (n: number) => void;
 }) {
-  const { quranShowEnglish, setQuranShowEnglish, setQuranBookmark } = useStore();
-  const scroller = useRef<HTMLDivElement>(null);
+  const { quranReciter, setQuranReciter, setQuranBookmark } = useStore();
+  const page = useRef<HTMLDivElement>(null);
+  const audio = useRef<HTMLAudioElement | null>(null);
+  const [selected, setSelected] = useState(startAyah);
+  const [playing, setPlaying] = useState(false);
+  const playFrom = useRef<{ surah: number; ayah: number } | null>(null);
+
+  const basmala = data.surahs[0].ar[0];
+  const showBasmala = surah.n !== 1 && surah.n !== 9;
 
   useEffect(() => {
+    document.body.classList.add('reading-mushaf');
+    return () => document.body.classList.remove('reading-mushaf');
+  }, []);
+
+  useEffect(() => {
+    setSelected(startAyah);
     setQuranBookmark({ surah: surah.n, ayah: startAyah });
-    const node = scroller.current?.querySelector(`[data-ayah="${startAyah}"]`);
+    const node = page.current?.querySelector(`[data-ayah="${startAyah}"]`);
     if (startAyah > 1) node?.scrollIntoView({ block: 'center' });
   }, [surah.n, startAyah, setQuranBookmark]);
 
   useEffect(() => {
-    const root = scroller.current;
-    if (!root) return;
-    const nodes = [...root.querySelectorAll<HTMLElement>('[data-ayah]')];
-    const observer = new IntersectionObserver(
-      (entries) => {
-        const visible = entries
-          .filter((e) => e.isIntersecting)
-          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
-        const ayah = Number(visible[0]?.target.getAttribute('data-ayah'));
-        if (ayah) setQuranBookmark({ surah: surah.n, ayah });
-      },
-      { rootMargin: '-20% 0px -60% 0px', threshold: 0.1 },
+    return () => {
+      audio.current?.pause();
+      audio.current = null;
+    };
+  }, []);
+
+  const reciter = reciterById(quranReciter);
+
+  const play = (s: number, a: number, reciterId: ReciterId = reciter.id) => {
+    const chapter = data.surahs[s - 1];
+    if (!chapter || a < 1 || a > chapter.ar.length) {
+      setPlaying(false);
+      playFrom.current = null;
+      return;
+    }
+    setSelected(a);
+    setQuranBookmark({ surah: s, ayah: a });
+    playFrom.current = { surah: s, ayah: a };
+    const url = ayahAudioUrl(reciterId, globalAyahNumber(data, s, a));
+    if (!audio.current) {
+      audio.current = new Audio();
+      audio.current.preload = 'auto';
+      audio.current.setAttribute('playsinline', '');
+    }
+    const el = audio.current;
+    el.pause();
+    el.src = url;
+    el.onended = () => {
+      const nextA = a + 1;
+      if (nextA <= chapter.ar.length) play(s, nextA, reciterId);
+      else {
+        setPlaying(false);
+        playFrom.current = null;
+      }
+    };
+    el.onerror = () => setPlaying(false);
+    void el.play().then(
+      () => setPlaying(true),
+      () => setPlaying(false),
     );
-    nodes.forEach((n) => observer.observe(n));
-    return () => observer.disconnect();
-  }, [surah.n, setQuranBookmark]);
+  };
+
+  const stop = () => {
+    audio.current?.pause();
+    setPlaying(false);
+    playFrom.current = null;
+  };
+
+  const onReciter = (id: ReciterId) => {
+    setQuranReciter(id);
+    if (playing && playFrom.current) {
+      const at = playFrom.current;
+      play(at.surah, at.ayah, id);
+    }
+  };
 
   return (
-    <section className="flex flex-1 flex-col py-2">
-      <div className="flex items-center justify-between gap-2">
-        <button
-          onClick={onBack}
-          className="rounded-full px-3 py-1.5 text-sm text-[var(--ink-dim)] transition hover:bg-white/10"
-        >
-          ← Surahs
+    <div ref={page} className="mushaf-page">
+      <header className="mushaf-chrome">
+        <button type="button" className="mushaf-back" onClick={onBack} aria-label="Surahs">
+          ←
         </button>
-        <button
-          onClick={() => setQuranShowEnglish(!quranShowEnglish)}
-          className="rounded-full px-3 py-1.5 text-sm text-[var(--ink-dim)] transition hover:bg-white/10"
-        >
-          {quranShowEnglish ? 'Arabic only' : 'Show English'}
-        </button>
-      </div>
-
-      <header className="mt-3 px-1 text-center">
-        <p className="arabic mushaf text-3xl leading-relaxed">{surah.name}</p>
-        <p className="mt-1 text-sm text-[var(--ink-dim)]">
-          {surah.n}. {surah.tname} · {surah.ename}
-        </p>
-        <p className="text-[12px] text-[var(--ink-faint)]">
-          {surah.type} · {surah.ar.length} ayahs
-        </p>
+        <h1 className="arabic mushaf-title">{`سورة ${surah.name}`}</h1>
+        <span className="mushaf-chrome-meta tabular">
+          {surah.n}
+        </span>
       </header>
 
-      {surah.n !== 1 && surah.n !== 9 && (
-        <p className="arabic mushaf mt-5 text-center text-[1.7rem] leading-[2.1] text-[var(--ink)]">
-          {data.surahs[0].ar[0]}
-        </p>
-      )}
+      <div className="mushaf-sheet">
+        <div className="mushaf-surah-head">
+          <span className="mushaf-surah-side">{surah.type === 'Meccan' ? 'مكية' : 'مدنية'}</span>
+          <span className="arabic mushaf-surah-name">{surah.name}</span>
+          <span className="mushaf-surah-side tabular">{surah.ar.length}</span>
+        </div>
 
-      <div ref={scroller} className="mt-4 space-y-5">
-        {surah.ar.map((ar, i) => (
-          <article key={i} data-ayah={i + 1} className="px-1">
-            <p className="arabic mushaf text-[1.7rem] leading-[2.15]">
-              {ar}
-              <span className="ayah-mark tabular mx-1.5 inline-flex h-7 min-w-7 items-center justify-center rounded-full border border-[var(--card-line)] align-middle text-[11px] text-[var(--ink-dim)]">
-                {i + 1}
+        {showBasmala && <p className="arabic mushaf-basmala">{basmala}</p>}
+
+        <p className="arabic mushaf-body">
+          {surah.ar.map((raw, i) => {
+            const n = i + 1;
+            const ar =
+              n === 1 && showBasmala && raw.startsWith(basmala)
+                ? raw.slice(basmala.length).trim()
+                : raw;
+            const on = selected === n;
+            const now = playing && playFrom.current?.surah === surah.n && playFrom.current.ayah === n;
+            return (
+              <span
+                key={n}
+                data-ayah={n}
+                className={`mushaf-ayah${on ? ' is-on' : ''}${now ? ' is-playing' : ''}`}
+                onClick={() => {
+                  setSelected(n);
+                  setQuranBookmark({ surah: surah.n, ayah: n });
+                }}
+              >
+                {ar}
+                <span className="ayah-num" aria-hidden="true">
+                  {n}
+                </span>
               </span>
-            </p>
-            {quranShowEnglish && (
-              <p className="mt-2 text-[14px] leading-relaxed text-[var(--ink-dim)]">{surah.en[i]}</p>
-            )}
-          </article>
-        ))}
+            );
+          })}
+        </p>
+
+        <nav className="mushaf-turn">
+          {surah.n < 114 ? (
+            <button type="button" onClick={() => onOpen(surah.n + 1)}>
+              {data.surahs[surah.n].name} ←
+            </button>
+          ) : (
+            <span />
+          )}
+          {surah.n > 1 ? (
+            <button type="button" onClick={() => onOpen(surah.n - 1)}>
+              → {data.surahs[surah.n - 2].name}
+            </button>
+          ) : (
+            <span />
+          )}
+        </nav>
       </div>
 
-      <nav className="mt-8 flex items-center justify-between gap-3 pb-2">
-        {surah.n > 1 ? (
-          <button
-            onClick={() => onOpen(surah.n - 1)}
-            className="card flex-1 rounded-2xl px-4 py-3 text-left text-sm"
+      <div className="mushaf-tray">
+        <div className="mushaf-tray-row">
+          <p className="tabular text-[12px] text-[#6b5740]">
+            {surah.n}:{selected}
+          </p>
+          <select
+            className="mushaf-reciter"
+            value={reciter.id}
+            aria-label="Reciter"
+            onChange={(e) => {
+              const next = RECITERS.find((r) => r.id === e.target.value);
+              if (next) onReciter(next.id);
+            }}
           >
-            <span className="block text-[11px] text-[var(--ink-faint)]">Previous</span>
-            {data.surahs[surah.n - 2].tname}
-          </button>
-        ) : (
-          <span className="flex-1" />
-        )}
-        {surah.n < 114 ? (
+            {RECITERS.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.name}
+              </option>
+            ))}
+          </select>
           <button
-            onClick={() => onOpen(surah.n + 1)}
-            className="card flex-1 rounded-2xl px-4 py-3 text-right text-sm"
+            type="button"
+            className="mushaf-play"
+            onClick={() => (playing ? stop() : play(surah.n, selected))}
           >
-            <span className="block text-[11px] text-[var(--ink-faint)]">Next</span>
-            {data.surahs[surah.n].tname}
+            {playing ? 'Pause' : 'Recite'}
           </button>
-        ) : (
-          <span className="flex-1" />
-        )}
-      </nav>
-    </section>
+        </div>
+        <p className="mushaf-tray-en">{surah.en[selected - 1]}</p>
+        <p className="mushaf-tray-note">Saheeh International · translation, not the Qur’an</p>
+      </div>
+    </div>
   );
 }

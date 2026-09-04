@@ -119,9 +119,200 @@ body {
   text-align: right;
 }
 
-.ayah-mark {
+body.reading-mushaf {
+  overflow: hidden;
+}
+
+.mushaf-page {
+  position: fixed;
+  inset: 0;
+  bottom: calc(5.4rem + env(safe-area-inset-bottom));
+  z-index: 25;
+  display: flex;
+  flex-direction: column;
+  background: #f3ead4;
+  color: #1a140c;
+}
+
+.mushaf-chrome {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.55rem 0.85rem;
+  padding-top: max(0.55rem, env(safe-area-inset-top));
+  background: #efe4c9;
+  border-bottom: 1px solid #d9c8a3;
+}
+
+.mushaf-back {
+  width: 2.2rem;
+  height: 2.2rem;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #3d2f1c;
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+.mushaf-title {
+  flex: 1;
+  margin: 0;
+  text-align: center;
+  font-size: 1.35rem;
+  font-weight: 400;
+  color: #1a140c;
+}
+
+.mushaf-chrome-meta {
+  width: 2.2rem;
+  text-align: right;
+  font-size: 0.75rem;
+  color: #6b5740;
+}
+
+.mushaf-sheet {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 1.25rem 1.15rem 8.5rem;
+}
+
+.mushaf-surah-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin: 0.4rem 0 0.15rem;
+  padding: 0.7rem 1rem;
+  border: 1.5px solid #b0894b;
+  border-radius: 4px;
+  background: linear-gradient(180deg, #fbf6e8, #f0e2c4);
+  box-shadow: inset 0 0 0 3px #f3ead4, inset 0 0 0 4px #d4b57a;
+}
+
+.mushaf-surah-name {
+  font-size: 1.85rem;
+  line-height: 1.3;
+  color: #1a140c;
+}
+
+.mushaf-surah-side {
+  font-size: 0.72rem;
+  color: #6b5740;
+  min-width: 2.6rem;
+}
+
+.mushaf-basmala {
+  margin: 2.15rem 0 0;
+  text-align: center;
+  font-size: 1.9rem;
+  line-height: 2;
+  color: #1a140c;
+}
+
+.mushaf-body {
+  margin: 3.15rem 0 0;
+  font-size: 1.8rem;
+  line-height: 2.55;
+  text-align: justify;
+  text-align-last: center;
+  color: #1a140c;
+}
+
+.mushaf-ayah {
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.mushaf-ayah.is-on {
+  background: rgb(196 154 72 / 0.28);
+}
+
+.mushaf-ayah.is-playing {
+  background: rgb(196 154 72 / 0.42);
+}
+
+.ayah-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.55em;
+  height: 1.55em;
+  margin: 0 0.18em;
+  border: 1px solid #8a6a3b;
+  border-radius: 50%;
   font-family: var(--font-sans);
+  font-size: 0.52em;
+  font-variant-numeric: tabular-nums;
   direction: ltr;
+  vertical-align: middle;
+  color: #5c4528;
+}
+
+.mushaf-turn {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 2.5rem;
+  direction: rtl;
+}
+
+.mushaf-turn button {
+  border: 0;
+  background: transparent;
+  color: #6b5740;
+  font-size: 0.85rem;
+}
+
+.mushaf-tray {
+  position: absolute;
+  left: 0.7rem;
+  right: 0.7rem;
+  bottom: 0.55rem;
+  padding: 0.7rem 0.85rem 0.75rem;
+  border-radius: 1rem;
+  background: #efe4c9;
+  border: 1px solid #d9c8a3;
+  box-shadow: 0 8px 24px rgb(40 28 10 / 0.12);
+}
+
+.mushaf-tray-row {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.mushaf-reciter {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: #3d2f1c;
+  font-size: 0.82rem;
+}
+
+.mushaf-play {
+  border: 0;
+  border-radius: 999px;
+  padding: 0.4rem 0.9rem;
+  background: #3d2f1c;
+  color: #f3ead4;
+  font-size: 0.82rem;
+  font-weight: 500;
+}
+
+.mushaf-tray-en {
+  margin: 0.55rem 0 0;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: #3d2f1c;
+}
+
+.mushaf-tray-note {
+  margin: 0.25rem 0 0;
+  font-size: 0.65rem;
+  color: #8a7358;
 }
 
 /* ---------- clock faces ---------- */

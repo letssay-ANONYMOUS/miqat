@@ -3,7 +3,7 @@ import { persist } from 'zustand/middleware';
 import { DEFAULT_SETTINGS, type PrayerKey, type Settings } from './prayer';
 import { methodForPlace } from './methods';
 import type { Place } from './geo';
-import type { QuranBookmark } from './quran';
+import type { QuranBookmark, ReciterId } from './quran';
 
 interface State {
   place: Place | null;
@@ -32,6 +32,8 @@ interface State {
   setQuranBookmark: (mark: QuranBookmark) => void;
   quranShowEnglish: boolean;
   setQuranShowEnglish: (show: boolean) => void;
+  quranReciter: ReciterId;
+  setQuranReciter: (id: ReciterId) => void;
 }
 
 export const useStore = create<State>()(
@@ -84,8 +86,10 @@ export const useStore = create<State>()(
         }),
       quranBookmark: null,
       setQuranBookmark: (quranBookmark) => set({ quranBookmark }),
-      quranShowEnglish: true,
+      quranShowEnglish: false,
       setQuranShowEnglish: (quranShowEnglish) => set({ quranShowEnglish }),
+      quranReciter: 'ar.alafasy',
+      setQuranReciter: (quranReciter) => set({ quranReciter }),
     }),
     {
       name: 'miqat.v1',
