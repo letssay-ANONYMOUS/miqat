@@ -3,6 +3,7 @@ import { persist } from 'zustand/middleware';
 import { DEFAULT_SETTINGS, type PrayerKey, type Settings } from './prayer';
 import { methodForPlace } from './methods';
 import type { Place } from './geo';
+import type { QuranBookmark } from './quran';
 
 interface State {
   place: Place | null;
@@ -27,6 +28,10 @@ interface State {
   pinMethod: (pinned: boolean) => void;
   setIqamaOffset: (key: PrayerKey, minutes: number | null) => void;
   resetOffsets: () => void;
+  quranBookmark: QuranBookmark | null;
+  setQuranBookmark: (mark: QuranBookmark) => void;
+  quranShowEnglish: boolean;
+  setQuranShowEnglish: (show: boolean) => void;
 }
 
 export const useStore = create<State>()(
@@ -77,6 +82,10 @@ export const useStore = create<State>()(
             offsets: { fajr: 0, sunrise: 0, dhuhr: 0, asr: 0, maghrib: 0, isha: 0 },
           },
         }),
+      quranBookmark: null,
+      setQuranBookmark: (quranBookmark) => set({ quranBookmark }),
+      quranShowEnglish: true,
+      setQuranShowEnglish: (quranShowEnglish) => set({ quranShowEnglish }),
     }),
     {
       name: 'miqat.v1',

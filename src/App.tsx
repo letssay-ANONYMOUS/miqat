@@ -8,6 +8,7 @@ import { TabBar, type Page } from './components/TabBar';
 import { VerificationNote } from './components/VerificationNote';
 import { AuditStatus } from './components/AuditStatus';
 import { MonthContent } from './components/MonthSheet';
+import { QuranPage } from './components/QuranPage';
 import { Onboarding } from './components/Onboarding';
 import { Segmented } from './components/Segmented';
 import { Countdown } from './components/Countdown';
@@ -349,6 +350,12 @@ export default function App() {
                 In daylight the sun reading above needs no compass at all, and is exact.
               </p>
             </div>
+          </section>
+        )}
+
+        {page === 'quran' && (
+          <section className="flex-1 py-2">
+            <QuranPage />
           </section>
         )}
 

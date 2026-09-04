@@ -113,6 +113,17 @@ body {
   direction: rtl;
 }
 
+.mushaf {
+  font-family: 'Amiri Quran', var(--font-arabic);
+  direction: rtl;
+  text-align: right;
+}
+
+.ayah-mark {
+  font-family: var(--font-sans);
+  direction: ltr;
+}
+
 /* ---------- clock faces ---------- */
 
 .clock-light {
@@ -304,14 +315,15 @@ body {
 
 .tabbar {
   position: relative;
-  display: flex;
   isolation: isolate;
   width: 100%;
   max-width: 26rem;
+  min-height: 3.55rem;
   padding: 0.35rem;
   border-radius: 1.55rem;
   overflow: hidden;
   pointer-events: auto;
+  touch-action: manipulation;
   /* Opaque enough to read against anything: the blur is an enhancement, not
      the thing keeping the labels legible. */
   background: var(--dock);
@@ -321,37 +333,59 @@ body {
   box-shadow:
     inset 0 1px 0 rgb(255 255 255 / 0.14),
     0 10px 34px rgb(0 0 0 / 0.34);
-  /*
-   * The fold is a width change on this same element, so the glass stretches
-   * and squeezes rather than being swapped for a different shape. Unhurried on
-   * purpose — a fast spring on a large object reads as cheap; a longer travel
-   * with a gentle settle reads as weight.
-   */
+  /* Apple's standard ease-out. Width only — never scaleX, never 3D on this
+     node (Safari then drops taps on the folded pill). */
   transition:
-    max-width 0.72s cubic-bezier(0.22, 1.06, 0.32, 1),
-    padding 0.72s cubic-bezier(0.22, 1.06, 0.32, 1);
+    width 0.58s cubic-bezier(0.32, 0.72, 0, 1),
+    max-width 0.58s cubic-bezier(0.32, 0.72, 0, 1),
+    box-shadow 0.45s ease;
 }
 
 .tabbar.is-collapsed {
   max-width: 7.5rem;
+  min-width: 4.75rem;
+  transition:
+    width 0.5s cubic-bezier(0.32, 0.72, 0, 1),
+    max-width 0.5s cubic-bezier(0.32, 0.72, 0, 1),
+    box-shadow 0.4s ease;
 }
 
-/* Folded, the other three fold away to nothing and the first takes the width.
-   Clipped by the bar so they disappear behind its own edge as it closes. */
-.tabbar.is-collapsed .tabbar-item:not(:first-child) {
-  flex: 0 0 0;
-  min-width: 0;
-  padding-left: 0;
-  padding-right: 0;
+.tabbar-inner {
+  position: relative;
+  display: flex;
+  isolation: isolate;
+  width: var(--tabbar-inner, 100%);
+  min-width: var(--tabbar-inner, 100%);
+  height: 100%;
+}
+
+/* Covers the folded pill so a tap anywhere on it opens the bar. */
+.tabbar-expand {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: inherit;
+  /* iOS ignores taps on a fully transparent control. */
+  background: rgb(255 255 255 / 0.001);
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+}
+
+.tabbar.is-collapsed .tabbar-item:not([data-tab='times']) {
   opacity: 0;
   pointer-events: none;
+  transform: translateX(10px) scale(0.96);
 }
 
 /* The lens is a pill inside the dock, so it needs the dock's radius, not a
    circle's — otherwise it reads as a capsule floating in a rectangle. */
 .tabbar .segmented-lens {
-  top: 0.35rem;
-  bottom: 0.35rem;
+  top: 0;
+  bottom: 0;
   border-radius: 1.2rem;
   background:
     linear-gradient(180deg, rgb(255 255 255 / 0.26) 0%, rgb(255 255 255 / 0.05) 46%, rgb(255 255 255 / 0.14) 100%);
@@ -402,22 +436,25 @@ body {
 
 .tabbar-item {
   white-space: nowrap;
-  transition:
-    color 0.3s ease,
-    opacity 0.34s ease,
-    flex-basis 0.72s cubic-bezier(0.22, 1.06, 0.32, 1),
-    padding 0.72s cubic-bezier(0.22, 1.06, 0.32, 1);
   position: relative;
   z-index: 1;
-  transform: translateZ(0);
-  flex: 1;
+  flex: 1 0 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 0.2rem;
   padding: 0.5rem 0.25rem 0.45rem;
   border-radius: 1.2rem;
-  transition: color 0.3s ease;
+  transform: translateZ(0);
+  transition:
+    color 0.25s ease,
+    opacity 0.4s cubic-bezier(0.32, 0.72, 0, 1),
+    transform 0.5s cubic-bezier(0.32, 0.72, 0, 1);
+  transition-delay: calc(var(--i, 0) * 28ms);
+}
+
+.tabbar.is-collapsed .tabbar-item {
+  transition-delay: calc((4 - var(--i, 0)) * 20ms);
 }
 
 /* Room for the dock so the last row is never hidden behind it. */

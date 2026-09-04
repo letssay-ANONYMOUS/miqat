@@ -96,7 +96,7 @@ export function update(info: NowPlaying): void {
       title: `${info.prayer} · ${info.at}`,
       artist: info.remaining,
       album: info.place,
-      artwork: [{ src: '/icon.svg', sizes: '512x512', type: 'image/svg+xml' }],
+      artwork: [{ src: '/icon-512.png', sizes: '512x512', type: 'image/png' }],
     });
     navigator.mediaSession.playbackState = 'playing';
   } catch {

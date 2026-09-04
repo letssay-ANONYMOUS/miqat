@@ -31,8 +31,8 @@ function show(title: string, body: string) {
     const notification = new Notification(title, {
       body,
       tag: title,
-      icon: '/icon.svg',
-      badge: '/icon.svg',
+      icon: '/icon-192.png',
+      badge: '/icon-192.png',
     });
     setTimeout(() => notification.close(), 60_000);
   } catch {

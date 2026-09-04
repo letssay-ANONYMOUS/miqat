@@ -5,7 +5,7 @@
   "outputDirectory": "dist",
   "rewrites": [
     {
-      "source": "/(.*)",
+      "source": "/((?!api/|.*\\.).*)",
       "destination": "/index.html"
     }
   ],
@@ -28,6 +28,19 @@
     {
       "source": "/index.html",
       "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=0, must-revalidate"
+        }
+      ]
+    },
+    {
+      "source": "/apple-touch-icon(.*).png",
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "image/png"
+        },
         {
           "key": "Cache-Control",
           "value": "public, max-age=0, must-revalidate"

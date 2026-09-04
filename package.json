@@ -11,7 +11,8 @@
     "verify": "vite build --ssr scripts/verify.ts --outDir .tmp-verify --logLevel error && node .tmp-verify/verify.js",
     "build:functions": "node scripts/build-functions.mjs",
     "analytics": "node tools/analytics/serve.mjs",
-    "build:timetable": "vite build --ssr scripts/build-timetable.ts --outDir .tmp-verify --logLevel error && node .tmp-verify/build-timetable.js"
+    "build:timetable": "vite build --ssr scripts/build-timetable.ts --outDir .tmp-verify --logLevel error && node .tmp-verify/build-timetable.js",
+    "build:quran": "node scripts/build-quran.mjs"
   },
   "dependencies": {
     "adhan": "^4.4.3",
