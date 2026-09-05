@@ -127,6 +127,11 @@ export function normaliseSigned(degrees: number): number {
   return value;
 }
 
+/** Ease one heading toward another the short way around the circle. */
+export function lerpAngle(from: number, to: number, t: number): number {
+  return (from + normaliseSigned(to - from) * t + 360) % 360;
+}
+
 /** Where to turn, described the way a person would say it. */
 export function relativeTurn(from: number, to: number): { degrees: number; side: 'left' | 'right' } {
   const delta = normaliseSigned(to - from);

@@ -12,21 +12,23 @@ import {
 import { METHOD_BY_KEY, type MethodKey } from './methods';
 import { nearestStation } from './uaeStations';
 import { officialTimes } from './officialTimetable';
+import type { Language } from './i18n';
 
 export type PrayerKey = 'fajr' | 'sunrise' | 'dhuhr' | 'asr' | 'maghrib' | 'isha';
 
 export const PRAYER_ORDER: PrayerKey[] = ['fajr', 'sunrise', 'dhuhr', 'asr', 'maghrib', 'isha'];
 
-export const PRAYER_META: Record<PrayerKey, { en: string; ar: string; note: string }> = {
-  fajr: { en: 'Fajr', ar: 'الفجر', note: 'True dawn' },
-  sunrise: { en: 'Sunrise', ar: 'الشروق', note: 'Fajr window closes' },
-  dhuhr: { en: 'Dhuhr', ar: 'الظهر', note: 'Sun past the meridian' },
-  asr: { en: 'Asr', ar: 'العصر', note: 'Shadow length rule' },
-  maghrib: { en: 'Maghrib', ar: 'المغرب', note: 'Sunset' },
-  isha: { en: 'Isha', ar: 'العشاء', note: 'Twilight gone' },
+export const PRAYER_META: Record<PrayerKey, { en: string; ar: string; note: string; noteAr: string }> = {
+  fajr: { en: 'Fajr', ar: 'الفجر', note: 'True dawn', noteAr: 'الفجر الصادق' },
+  sunrise: { en: 'Sunrise', ar: 'الشروق', note: 'Fajr window closes', noteAr: 'نهاية وقت الفجر' },
+  dhuhr: { en: 'Dhuhr', ar: 'الظهر', note: 'Sun past the meridian', noteAr: 'بعد زوال الشمس' },
+  asr: { en: 'Asr', ar: 'العصر', note: 'Shadow length rule', noteAr: 'بحسب طول الظل' },
+  maghrib: { en: 'Maghrib', ar: 'المغرب', note: 'Sunset', noteAr: 'غروب الشمس' },
+  isha: { en: 'Isha', ar: 'العشاء', note: 'Twilight gone', noteAr: 'غياب الشفق' },
 };
 
 export interface Settings {
+  language: Language;
   method: MethodKey;
   madhab: 'shafi' | 'hanafi';
   highLatitudeRule: 'auto' | 'middleofthenight' | 'seventhofthenight' | 'twilightangle';
@@ -62,12 +64,15 @@ export interface Settings {
   /** Minutes of warning before each time; 0 fires at the time itself. */
   notifyLead: number;
   lockScreenEnabled: boolean;
+  /** Which countdown the Dynamic Island / lock screen shows. */
+  lockScreenMode: 'adhan' | 'iqama';
   soundEnabled: boolean;
   /** 0 to 1. */
   soundVolume: number;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
+  language: 'en',
   method: 'MuslimWorldLeague',
   madhab: 'shafi',
   highLatitudeRule: 'auto',
@@ -88,6 +93,7 @@ export const DEFAULT_SETTINGS: Settings = {
   notifyEnabled: false,
   notifyLead: 0,
   lockScreenEnabled: false,
+  lockScreenMode: 'adhan',
   soundEnabled: false,
   soundVolume: 0.6,
 };

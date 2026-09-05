@@ -7,13 +7,15 @@ import {
   type ReactNode,
 } from 'react';
 import { haptic } from '../lib/feel';
+import { useI18n } from '../lib/i18n';
 
 export type Page = 'times' | 'qibla' | 'quran' | 'month' | 'settings';
 
-const TABS: { id: Page; label: string; icon: ReactNode }[] = [
+const TABS: { id: Page; label: string; labelAr: string; icon: ReactNode }[] = [
   {
     id: 'times',
     label: 'Times',
+    labelAr: 'المواقيت',
     icon: (
       <>
         <circle cx="11" cy="11" r="7.4" stroke="currentColor" strokeWidth="1.6" />
@@ -24,6 +26,7 @@ const TABS: { id: Page; label: string; icon: ReactNode }[] = [
   {
     id: 'qibla',
     label: 'Qibla',
+    labelAr: 'القبلة',
     icon: (
       <>
         <circle cx="11" cy="11" r="7.4" stroke="currentColor" strokeWidth="1.6" />
@@ -34,6 +37,7 @@ const TABS: { id: Page; label: string; icon: ReactNode }[] = [
   {
     id: 'quran',
     label: 'Qur’an',
+    labelAr: 'القرآن',
     icon: (
       <>
         <path
@@ -49,6 +53,7 @@ const TABS: { id: Page; label: string; icon: ReactNode }[] = [
   {
     id: 'month',
     label: 'Month',
+    labelAr: 'الشهر',
     icon: (
       <>
         <rect x="3.4" y="4.6" width="15.2" height="14" rx="3" stroke="currentColor" strokeWidth="1.6" />
@@ -59,15 +64,16 @@ const TABS: { id: Page; label: string; icon: ReactNode }[] = [
   {
     id: 'settings',
     label: 'Settings',
+    labelAr: 'الإعدادات',
     icon: (
       <>
-        <circle cx="11" cy="11" r="2.9" stroke="currentColor" strokeWidth="1.6" />
         <path
-          d="M11 3v1.9M11 17.1V19M19 11h-1.9M4.9 11H3M16.7 5.3l-1.4 1.4M6.7 15.3l-1.4 1.4M16.7 16.7l-1.4-1.4M6.7 6.7L5.3 5.3"
+          d="M8.95 3.2h4.1l.42 1.72c.46.14.9.35 1.3.61l1.62-.7 2.05 2.05-.7 1.62c.26.4.47.84.61 1.3l1.72.42v4.1l-1.72.42a5.7 5.7 0 01-.61 1.3l.7 1.62-2.05 2.05-1.62-.7a5.7 5.7 0 01-1.3.61l-.42 1.72h-4.1l-.42-1.72a5.7 5.7 0 01-1.3-.61l-1.62.7-2.05-2.05.7-1.62a5.7 5.7 0 01-.61-1.3L3.2 13.05v-4.1l1.72-.42c.14-.46.35-.9.61-1.3l-.7-1.62 2.05-2.05 1.62.7c.4-.26.84-.47 1.3-.61L8.95 3.2z"
           stroke="currentColor"
-          strokeWidth="1.6"
-          strokeLinecap="round"
+          strokeWidth="1.55"
+          strokeLinejoin="round"
         />
+        <circle cx="11" cy="11" r="2.45" stroke="currentColor" strokeWidth="1.55" />
       </>
     ),
   },
@@ -81,6 +87,7 @@ const TABS: { id: Page; label: string; icon: ReactNode }[] = [
  * 3D-transformed overflow, which is why the last version would not reopen).
  */
 export function TabBar({ page, onChange }: { page: Page; onChange: (page: Page) => void }) {
+  const { isArabic, text } = useI18n();
   const rail = useRef<HTMLDivElement>(null);
   const bar = useRef<HTMLDivElement>(null);
   const items = useRef(new Map<Page, HTMLButtonElement>());
@@ -141,13 +148,13 @@ export function TabBar({ page, onChange }: { page: Page; onChange: (page: Page) 
   const width = collapsed ? shutW || undefined : openW || undefined;
 
   return (
-    <nav className="tabbar-dock">
+    <nav className="tabbar-dock" dir="ltr">
       <div ref={rail} className="tabbar-rail">
         <div
           ref={bar}
           className={`tabbar${collapsed ? ' is-collapsed' : ''}`}
           role="tablist"
-          aria-label="Pages"
+          aria-label={text('Pages', 'الصفحات')}
           style={
             width
               ? ({
@@ -162,7 +169,7 @@ export function TabBar({ page, onChange }: { page: Page; onChange: (page: Page) 
             <button
               type="button"
               className="tabbar-expand"
-              aria-label="Open navigation"
+              aria-label={text('Open navigation', 'فتح شريط التنقل')}
               onClick={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
@@ -192,8 +199,8 @@ export function TabBar({ page, onChange }: { page: Page; onChange: (page: Page) 
                 tabIndex={collapsed ? -1 : undefined}
                 aria-label={
                   tab.id === 'times' && page === 'times' && !collapsed
-                    ? 'Collapse navigation'
-                    : tab.label
+                    ? text('Collapse navigation', 'طي شريط التنقل')
+                    : isArabic ? tab.labelAr : tab.label
                 }
                 onClick={() => select(tab.id)}
                 className={`tabbar-item ${page === tab.id ? 'text-[var(--ink)]' : 'text-[var(--ink-dim)]'}`}
@@ -202,7 +209,9 @@ export function TabBar({ page, onChange }: { page: Page; onChange: (page: Page) 
                 <svg width="22" height="22" viewBox="0 0 22 22" fill="none" aria-hidden="true">
                   {tab.icon}
                 </svg>
-                <span className="text-[10px] font-medium tracking-wide">{tab.label}</span>
+                <span className="text-[10px] font-medium tracking-wide">
+                  {isArabic ? tab.labelAr : tab.label}
+                </span>
               </button>
             ))}
           </div>

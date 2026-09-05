@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { readingFrom, relativeTurn, solarCalibration, type Reading } from '../lib/heading';
+import { lerpAngle, readingFrom, relativeTurn, solarCalibration, type Reading } from '../lib/heading';
 import { sunPosition } from '../lib/sun';
 import { useStore } from '../lib/store';
 import { haptic, hapticsAvailable } from '../lib/feel';
+import { useI18n } from '../lib/i18n';
 
 type PermissionCapableCtor = typeof DeviceOrientationEvent & {
   requestPermission?: () => Promise<'granted' | 'denied'>;
@@ -11,10 +12,10 @@ type PermissionCapableCtor = typeof DeviceOrientationEvent & {
 type Status = 'idle' | 'live' | 'denied' | 'unsupported';
 
 const CARDINALS = [
-  { label: 'N', angle: 0 },
-  { label: 'E', angle: 90 },
-  { label: 'S', angle: 180 },
-  { label: 'W', angle: 270 },
+  { label: 'N', labelAr: 'ش', angle: 0 },
+  { label: 'E', labelAr: 'ق', angle: 90 },
+  { label: 'S', labelAr: 'ج', angle: 180 },
+  { label: 'W', labelAr: 'غ', angle: 270 },
 ];
 
 /**
@@ -30,11 +31,26 @@ export function QiblaCompass({ bearing }: { bearing: number }) {
   const place = useStore((state) => state.place);
   const qiblaOffset = useStore((state) => state.qiblaOffset);
   const setQiblaOffset = useStore((state) => state.setQiblaOffset);
+  const { isArabic, text } = useI18n();
 
   const [reading, setReading] = useState<Reading | null>(null);
   const [status, setStatus] = useState<Status>('idle');
   const [now, setNow] = useState(() => new Date());
+  const [aligned, setAligned] = useState(false);
   const listening = useRef(false);
+  const raw = useRef<Reading | null>(null);
+  const shown = useRef(0);
+  const rose = useRef<SVGGElement>(null);
+  const needle = useRef<SVGGElement>(null);
+  const lastFrame = useRef(0);
+  const lastUi = useRef(0);
+  const lastStep = useRef<number | null>(null);
+  const wasAligned = useRef(false);
+  const primed = useRef(false);
+  const ios =
+    typeof navigator !== 'undefined' &&
+    (/iPad|iPhone|iPod/.test(navigator.userAgent) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1));
 
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 20_000);
@@ -46,15 +62,79 @@ export function QiblaCompass({ bearing }: { bearing: number }) {
     listening.current = true;
     const onOrientation = (event: Event) => {
       const next = readingFrom(event as DeviceOrientationEvent);
-      if (next) setReading(next);
+      if (next) raw.current = next;
     };
-    const name = 'ondeviceorientationabsolute' in window ? 'deviceorientationabsolute' : 'deviceorientation';
-    window.addEventListener(name, onOrientation, true);
+    // iOS puts webkitCompassHeading on deviceorientation; absolute is extra on Android.
+    window.addEventListener('deviceorientation', onOrientation, true);
+    if ('ondeviceorientationabsolute' in window) {
+      window.addEventListener('deviceorientationabsolute', onOrientation, true);
+    }
     return () => {
-      window.removeEventListener(name, onOrientation, true);
+      window.removeEventListener('deviceorientation', onOrientation, true);
+      window.removeEventListener('deviceorientationabsolute', onOrientation, true);
       listening.current = false;
     };
   }, [status]);
+
+  useEffect(() => {
+    if (status !== 'live') return;
+    let raf = 0;
+    const tick = (time: number) => {
+      raf = requestAnimationFrame(tick);
+      const sample = raw.current;
+      if (!sample || sample.reference === 'unusable') return;
+
+      const dt = lastFrame.current ? Math.min(0.05, (time - lastFrame.current) / 1000) : 0.016;
+      lastFrame.current = time;
+      const corrected = (sample.degrees + qiblaOffset + 360) % 360;
+      if (!primed.current) {
+        shown.current = corrected;
+        primed.current = true;
+        setReading(sample);
+      }
+      const tau = ios ? 0.1 : 0.055;
+      const k = 1 - Math.exp(-dt / tau);
+      shown.current = lerpAngle(shown.current, corrected, k);
+
+      if (rose.current) rose.current.style.transform = `rotate(${-shown.current}deg)`;
+      if (needle.current) needle.current.style.transform = `rotate(${bearing - shown.current}deg)`;
+
+      const rotation = bearing - shown.current;
+      const off = Math.abs(((rotation % 360) + 360) % 360);
+      const on = off < 4 || off > 356;
+
+      if (on && !wasAligned.current) haptic('lock');
+      wasAligned.current = on;
+      if (!on) {
+        const away = Math.min(off, 360 - off);
+        if (away < 40) {
+          const step = Math.round(away / 5);
+          if (lastStep.current !== null && step !== lastStep.current) haptic('tick');
+          lastStep.current = step;
+        } else {
+          lastStep.current = null;
+        }
+      }
+
+      if (time - lastUi.current > 180) {
+        lastUi.current = time;
+        setAligned(on);
+        setReading((prev) => {
+          if (
+            prev &&
+            prev.reference === sample.reference &&
+            Math.abs(prev.level - sample.level) < 0.05 &&
+            prev.accuracy === sample.accuracy
+          ) {
+            return prev;
+          }
+          return sample;
+        });
+      }
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [status, bearing, qiblaOffset, ios]);
 
   const enable = async () => {
     if (typeof DeviceOrientationEvent === 'undefined') return setStatus('unsupported');
@@ -63,6 +143,8 @@ export function QiblaCompass({ bearing }: { bearing: number }) {
       if (typeof ctor.requestPermission === 'function') {
         if ((await ctor.requestPermission()) !== 'granted') return setStatus('denied');
       }
+      primed.current = false;
+      lastFrame.current = 0;
       setStatus('live');
     } catch {
       setStatus('denied');
@@ -73,36 +155,8 @@ export function QiblaCompass({ bearing }: { bearing: number }) {
   const sunUp = sun !== null && sun.altitude > 1;
   const fromSun = sun ? relativeTurn(sun.azimuth, bearing) : null;
 
-  const corrected =
-    reading && reading.reference !== 'unusable' ? (reading.degrees + qiblaOffset + 360) % 360 : null;
-  const live = corrected !== null;
+  const live = reading !== null && reading.reference !== 'unusable';
   const shaky = reading !== null && (reading.level < 0.45 || (reading.accuracy ?? 0) < 0);
-  const rotation = live ? bearing - corrected : bearing;
-  const aligned = live && Math.abs(((rotation + 540) % 360) - 180) > 176;
-
-  /*
-   * Feedback as you turn: a light tick each time you cross a five-degree step
-   * on the way in, and a firmer double pulse the moment you are on the Qibla —
-   * so it can be found without watching the screen.
-   */
-  const lastStep = useRef<number | null>(null);
-  const wasAligned = useRef(false);
-  useEffect(() => {
-    if (!live) return;
-    const off = Math.abs(((rotation + 540) % 360) - 180);
-    const away = 180 - off;
-
-    if (aligned && !wasAligned.current) haptic('lock');
-    wasAligned.current = aligned;
-
-    if (!aligned && away < 40) {
-      const step = Math.round(away / 5);
-      if (lastStep.current !== null && step !== lastStep.current) haptic('tick');
-      lastStep.current = step;
-    } else {
-      lastStep.current = null;
-    }
-  }, [rotation, live, aligned]);
 
   const calibrate = () => {
     if (reading && sun) setQiblaOffset(solarCalibration(sun.azimuth, reading.degrees));
@@ -111,7 +165,7 @@ export function QiblaCompass({ bearing }: { bearing: number }) {
   return (
     <div className="flex flex-col items-center">
       <div className={`qibla-stage${aligned ? ' is-aligned' : ''}`}>
-        <svg viewBox="0 0 400 400" className="qibla-face" aria-label={`Qibla ${bearing.toFixed(1)} degrees from true north`}>
+        <svg viewBox="0 0 400 400" className="qibla-face" aria-label={text(`Qibla ${bearing.toFixed(1)} degrees from true north`, `اتجاه القبلة ${bearing.toFixed(1)} درجة من الشمال الحقيقي`)}>
           <defs>
             <radialGradient id="q-well" cx="42%" cy="34%" r="72%">
               <stop offset="0%" stopColor="var(--card)" stopOpacity="0.9" />
@@ -134,10 +188,10 @@ export function QiblaCompass({ bearing }: { bearing: number }) {
 
           {/* The rose turns with the phone; the Qibla marker rides on it. */}
           <g
+            ref={rose}
+            className="qibla-spin"
             style={{
-              transform: `rotate(${live ? -corrected! : 0}deg)`,
               transformOrigin: '200px 200px',
-              transition: live ? 'transform .14s linear' : 'transform .7s cubic-bezier(.22,1,.36,1)',
             }}
           >
             {Array.from({ length: 72 }, (_, i) => {
@@ -159,7 +213,7 @@ export function QiblaCompass({ bearing }: { bearing: number }) {
               );
             })}
 
-            {CARDINALS.map(({ label, angle }) => (
+            {CARDINALS.map(({ label, labelAr, angle }) => (
               <g key={label} transform={`rotate(${angle} 200 200)`}>
                 {/* Counter-rotated so the glyph itself is never on its side. */}
                 <text
@@ -172,7 +226,7 @@ export function QiblaCompass({ bearing }: { bearing: number }) {
                   fill={label === 'N' ? 'var(--accent)' : 'var(--ink-faint)'}
                   transform={`rotate(${-angle} 200 68)`}
                 >
-                  {label}
+                  {isArabic ? labelAr : label}
                 </text>
               </g>
             ))}
@@ -190,11 +244,11 @@ export function QiblaCompass({ bearing }: { bearing: number }) {
 
           {/* The needle is fixed to the screen: it points where you must turn. */}
           <g
+            ref={needle}
+            className="qibla-spin"
             opacity={shaky ? 0.4 : 1}
             style={{
-              transform: `rotate(${rotation}deg)`,
               transformOrigin: '200px 200px',
-              transition: live ? 'transform .14s linear' : 'transform .7s cubic-bezier(.22,1,.36,1)',
             }}
           >
             <path d="M200 74 L212 196 L200 186 L188 196 Z" fill="url(#q-needle)" />
@@ -208,7 +262,7 @@ export function QiblaCompass({ bearing }: { bearing: number }) {
         <div className="qibla-readout">
           <p className="tabular qibla-degrees">{bearing.toFixed(1)}°</p>
           <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--ink-faint)]">
-            from true north
+            {text('from true north', 'من الشمال الحقيقي')}
           </p>
         </div>
       </div>
@@ -216,11 +270,11 @@ export function QiblaCompass({ bearing }: { bearing: number }) {
       <div className="mt-6 w-full max-w-sm space-y-3 text-center">
         {sunUp && fromSun && (
           <p className="text-sm leading-relaxed text-[var(--ink-dim)]">
-            Face the sun, then turn{' '}
+            {text('Face the sun, then turn', 'واجه الشمس، ثم استدر')}{' '}
             <span className="font-semibold text-[var(--ink)]">
-              {fromSun.degrees}° to your {fromSun.side}
+              {fromSun.degrees}° {text(`to your ${fromSun.side}`, fromSun.side === 'left' ? 'إلى يسارك' : 'إلى يمينك')}
             </span>
-            . Exact — from the sun's position, no compass involved.
+            {text('. Exact — from the sun’s position, no compass involved.', '. اتجاه دقيق محسوب من موقع الشمس، من دون استخدام البوصلة.')}
           </p>
         )}
 
@@ -232,41 +286,39 @@ export function QiblaCompass({ bearing }: { bearing: number }) {
             }}
             className="w-full rounded-2xl bg-[var(--accent)] px-5 py-3.5 text-sm font-semibold text-[var(--on-accent)] transition active:brightness-110"
           >
-            Turn on the live compass
+            {text('Turn on the live compass', 'تشغيل البوصلة المباشرة')}
           </button>
         )}
 
         {status === 'live' && !reading && (
-          <p className="text-sm text-[var(--ink-dim)]">Waiting for the compass…</p>
+          <p className="text-sm text-[var(--ink-dim)]">{text('Waiting for the compass…', 'بانتظار قراءة البوصلة…')}</p>
         )}
 
         {reading?.reference === 'unusable' && (
           <p className="text-sm leading-relaxed text-[var(--ink-dim)]">
-            This browser reports orientation relative to however the phone was held when the page
-            opened, not to the earth — it cannot be a compass. Use the sun instead.
+            {text('This browser reports orientation relative to however the phone was held when the page opened, not to the earth — it cannot be a compass. Use the sun instead.', 'يبلغ هذا المتصفح عن الاتجاه نسبةً إلى وضع الهاتف عند فتح الصفحة، لا نسبةً إلى الأرض، لذلك لا يمكن استخدامه كبوصلة. استخدم الشمس بدلًا منه.')}
           </p>
         )}
 
         {live && shaky && (
           <p className="text-sm text-[var(--ink-dim)]">
-            Hold the phone flat, away from metal — the reading is unsteady.
+            {text('Hold the phone flat, away from metal — the reading is unsteady.', 'أمسك الهاتف أفقيًا وبعيدًا عن المعادن، فالقراءة غير مستقرة.')}
           </p>
         )}
 
         {live && !hapticsAvailable && (
           <p className="text-xs leading-relaxed text-[var(--ink-faint)]">
-            No buzz on this device — iPhones give web pages no way to trigger haptics. The dial
-            still glows when you are on the Qibla.
+            {text('No buzz on this device — iPhones give web pages no way to trigger haptics. The dial still glows when you are on the Qibla.', 'لا يتوفر اهتزاز على هذا الجهاز، إذ لا تسمح هواتف iPhone لصفحات الويب بتشغيل اللمسات الاهتزازية. ستظل الحلقة تتوهج عند محاذاة القبلة.')}
           </p>
         )}
 
         {live && !shaky && (
           <p className="text-sm text-[var(--ink-dim)]">
             {reading?.reference === 'true'
-              ? 'Live, referenced to true north.'
+              ? text('Live, referenced to true north.', 'قراءة مباشرة نسبةً إلى الشمال الحقيقي.')
               : qiblaOffset !== 0
-                ? 'Live, corrected against the sun.'
-                : 'Live, from magnetic north — a couple of degrees off in the UAE, more elsewhere.'}
+                ? text('Live, corrected against the sun.', 'قراءة مباشرة مصححة باستخدام الشمس.')
+                : text('Live, from magnetic north — a couple of degrees off in the UAE, more elsewhere.', 'قراءة مباشرة من الشمال المغناطيسي؛ قد تنحرف بضع درجات في الإمارات وأكثر في أماكن أخرى.')}
           </p>
         )}
 
@@ -276,8 +328,8 @@ export function QiblaCompass({ bearing }: { bearing: number }) {
             className="w-full rounded-2xl border border-[var(--card-line)] px-5 py-3 text-sm font-medium transition active:bg-white/10"
           >
             {qiblaOffset === 0
-              ? 'Calibrate: aim the top of the phone at the sun, then tap'
-              : 'Re-calibrate against the sun'}
+              ? text('Calibrate: aim the top of the phone at the sun, then tap', 'للمعايرة: وجّه أعلى الهاتف نحو الشمس ثم اضغط')
+              : text('Re-calibrate against the sun', 'إعادة المعايرة باستخدام الشمس')}
           </button>
         )}
 
@@ -286,19 +338,19 @@ export function QiblaCompass({ bearing }: { bearing: number }) {
             onClick={() => setQiblaOffset(0)}
             className="text-xs text-[var(--ink-dim)] underline underline-offset-4"
           >
-            Clear the {qiblaOffset > 0 ? '+' : ''}
-            {qiblaOffset.toFixed(1)}° correction
+            {text('Clear the', 'مسح تصحيح')} {qiblaOffset > 0 ? '+' : ''}
+            {qiblaOffset.toFixed(1)}°
           </button>
         )}
 
         {status === 'denied' && (
           <p className="text-sm text-[var(--ink-dim)]">
-            Motion access refused. The angle above is still exact, from true north.
+            {text('Motion access refused. The angle above is still exact, from true north.', 'تم رفض إذن الحركة. تظل الزاوية أعلاه دقيقة ومحسوبة من الشمال الحقيقي.')}
           </p>
         )}
         {status === 'unsupported' && (
           <p className="text-sm text-[var(--ink-dim)]">
-            No compass on this device. The angle above is from true north.
+            {text('No compass on this device. The angle above is from true north.', 'لا توجد بوصلة في هذا الجهاز. الزاوية أعلاه محسوبة من الشمال الحقيقي.')}
           </p>
         )}
       </div>

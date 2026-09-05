@@ -113,6 +113,21 @@ body {
   direction: rtl;
 }
 
+/* Arabic UI uses the system's native Arabic face. Keep numerical prayer
+   readouts left-to-right so colons, signs and coordinates never reorder. */
+html[lang='ar'] body {
+  font-family: 'SF Arabic', 'Geeza Pro', system-ui, sans-serif;
+}
+
+html[dir='rtl'] .tabular {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+html[dir='rtl'] [class*='tracking-'] {
+  letter-spacing: 0;
+}
+
 .mushaf {
   font-family: 'Amiri Quran', var(--font-arabic);
   direction: rtl;
@@ -781,6 +796,10 @@ body.reading-mushaf.show-app-chrome .tabbar-dock {
   height: 100%;
   display: block;
   filter: drop-shadow(0 10px 34px rgb(0 0 0 / 0.24));
+}
+
+.qibla-spin {
+  will-change: transform;
 }
 
 /* The reading sits in the well of the dial, under the needle's pivot. */
