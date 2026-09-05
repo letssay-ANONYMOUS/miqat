@@ -80,26 +80,49 @@ const TABS: { id: Page; label: string; labelAr: string; icon: ReactNode }[] = [
 ];
 
 /**
- * Bottom dock. On Times it folds to one button; tap the pill to open it.
- *
- * Width is a clip, not a squash — the inner row stays full-size. A dedicated
- * overlay sits on the folded pill so the tap cannot miss (Safari drops hits on
- * 3D-transformed overflow, which is why the last version would not reopen).
+ * Bottom dock. On Times it folds with scroll: full at the top, short once you
+ * leave the top. Tapping the short pill pins it open until you collapse it or
+ * return to the top.
  */
+const TOP = 24;
+
 export function TabBar({ page, onChange }: { page: Page; onChange: (page: Page) => void }) {
   const { isArabic, text } = useI18n();
   const rail = useRef<HTMLDivElement>(null);
   const bar = useRef<HTMLDivElement>(null);
   const items = useRef(new Map<Page, HTMLButtonElement>());
+  const pinned = useRef(false);
+  const pageRef = useRef(page);
+  pageRef.current = page;
   const [lens, setLens] = useState<{ left: number; width: number } | null>(null);
   const [openW, setOpenW] = useState(0);
   const [innerW, setInnerW] = useState(0);
   const [shutW, setShutW] = useState(0);
-  const [collapsed, setCollapsed] = useState(page === 'times');
+  const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
-    if (page !== 'times') setCollapsed(false);
+    if (page !== 'times') {
+      pinned.current = false;
+      setCollapsed(false);
+    }
   }, [page]);
+
+  useEffect(() => {
+    const apply = () => {
+      if (pageRef.current !== 'times') return;
+      if (document.body.classList.contains('reading-mushaf')) return;
+      const atTop = window.scrollY <= TOP;
+      if (atTop) {
+        pinned.current = false;
+        setCollapsed((c) => (c ? false : c));
+      } else if (!pinned.current) {
+        setCollapsed((c) => (c ? c : true));
+      }
+    };
+    apply();
+    window.addEventListener('scroll', apply, { passive: true });
+    return () => window.removeEventListener('scroll', apply);
+  }, []);
 
   useLayoutEffect(() => {
     const railEl = rail.current;
@@ -129,6 +152,7 @@ export function TabBar({ page, onChange }: { page: Page; onChange: (page: Page) 
 
   const expand = () => {
     haptic('soft');
+    pinned.current = true;
     setCollapsed(false);
   };
 
@@ -139,6 +163,8 @@ export function TabBar({ page, onChange }: { page: Page; onChange: (page: Page) 
     }
     haptic('tick');
     if (id === 'times' && page === 'times') {
+      if (window.scrollY <= TOP) return;
+      pinned.current = false;
       setCollapsed(true);
       return;
     }
