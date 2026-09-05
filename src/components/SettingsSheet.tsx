@@ -9,16 +9,35 @@ import { DIAL_STYLES, Dial } from './Dial';
 import { ClockFormatPreview, IqamaPreview, LayoutPreview, OffsetPreview } from './SettingPreview';
 import { NotifySetting } from './NotifySetting';
 import { PrivacySetting } from './PrivacySetting';
+import { useI18n } from '../lib/i18n';
+import type { ClockStyle } from './Countdown';
+import type { DialStyle } from './Dial';
 
 type Tab = 'display' | 'iqama' | 'calculation' | 'fine' | 'privacy';
 
-const TABS: { id: Tab; label: string }[] = [
-  { id: 'display', label: 'Display' },
-  { id: 'iqama', label: 'Iqama' },
-  { id: 'calculation', label: 'Method' },
-  { id: 'fine', label: 'Fine tune' },
-  { id: 'privacy', label: 'Privacy' },
+const TABS: { id: Tab; label: string; labelAr: string }[] = [
+  { id: 'display', label: 'Display', labelAr: 'العرض' },
+  { id: 'iqama', label: 'Iqama', labelAr: 'الإقامة' },
+  { id: 'calculation', label: 'Method', labelAr: 'الحساب' },
+  { id: 'fine', label: 'Fine tune', labelAr: 'الضبط' },
+  { id: 'privacy', label: 'Privacy', labelAr: 'الخصوصية' },
 ];
+
+const CLOCK_LABEL_AR: Record<ClockStyle, string> = {
+  light: 'خفيف', serif: 'كلاسيكي', mono: 'أحادي', words: 'بالكلمات', target: 'وقت الصلاة',
+};
+
+const CLOCK_SAMPLE_AR: Record<ClockStyle, string> = {
+  light: '1:28:33', serif: '1:28:33', mono: '1:28:33', words: '1 س 28 د', target: '04:39',
+};
+
+const DIAL_AR: Record<DialStyle, { label: string; hint: string }> = {
+  arc: { label: 'قوس', hint: 'خط رفيع يكتمل تدريجيًا' },
+  ticks: { label: 'علامات', hint: 'ستون علامة تضيء بالتتابع' },
+  sweep: { label: 'عقرب', hint: 'عقرب متحرك مع الثواني' },
+  orbit: { label: 'مدار', hint: 'نقطة تدور مع أثر خلفها' },
+  chronograph: { label: 'كرونوغراف', hint: 'اثنا عشر جزءًا تمتلئ تدريجيًا' },
+};
 
 export function SettingsContent() {
   const {
@@ -31,6 +50,7 @@ export function SettingsContent() {
     methodPinned,
     place,
   } = useStore();
+  const { isArabic, text, methodLabel, methodSummary } = useI18n();
   const [tab, setTab] = useState<Tab>('display');
   const method = METHOD_BY_KEY.get(settings.method)!;
   const suggested = methodForPlace(place?.countryCode, place?.latitude, place?.longitude);
@@ -38,21 +58,37 @@ export function SettingsContent() {
 
   return (
     <>
+      <div className="mb-5">
+        <span className="text-[13px] font-medium text-[var(--ink-dim)]">
+          {text('Language', 'اللغة')}
+        </span>
+        <div className="mt-2">
+          <Segmented
+            label={text('App language', 'لغة التطبيق')}
+            value={settings.language}
+            onChange={(language) => patchSettings({ language })}
+            options={[
+              { value: 'en', label: 'English' },
+              { value: 'ar', label: 'العربية' },
+            ]}
+          />
+        </div>
+      </div>
       <div className="-mt-1 mb-5">
         <Segmented
-          label="Settings section"
+          label={text('Settings section', 'قسم الإعدادات')}
           value={tab}
           onChange={setTab}
           size="compact"
           fill={false}
-          options={TABS.map((t) => ({ value: t.id, label: t.label }))}
+          options={TABS.map((t) => ({ value: t.id, label: isArabic ? t.labelAr : t.label }))}
         />
       </div>
 
       {tab === 'display' && (
         <div className="space-y-6">
           <div>
-            <span className="text-[13px] font-medium text-[var(--ink-dim)]">Clock</span>
+            <span className="text-[13px] font-medium text-[var(--ink-dim)]">{text('Clock', 'الساعة')}</span>
             <div className="mt-2 grid grid-cols-2 gap-2">
               {(['24h', '12h'] as const).map((option) => (
                 <button
@@ -64,32 +100,32 @@ export function SettingsContent() {
                       : 'border-[var(--card-line)] active:bg-white/5'
                   }`}
                 >
-                  <ClockFormatPreview format={option} />
+                  <ClockFormatPreview format={option} language={settings.language} />
                   <span className="text-xs text-[var(--ink-dim)]">
-                    {option === '24h' ? '24-hour' : '12-hour'}
+                    {option === '24h' ? text('24-hour', 'نظام 24 ساعة') : text('12-hour', 'نظام 12 ساعة')}
                   </span>
                 </button>
               ))}
             </div>
           </div>
           <div>
-            <span className="text-[13px] font-medium text-[var(--ink-dim)]">Clock face</span>
+            <span className="text-[13px] font-medium text-[var(--ink-dim)]">{text('Clock face', 'شكل الساعة')}</span>
             <div className="mt-2 grid grid-cols-2 gap-2">
               {CLOCK_STYLES.map((option) => (
                 <button
                   key={option.value}
                   onClick={() => patchSettings({ clockStyle: option.value })}
-                  className={`rounded-xl border px-3 py-3 text-left transition ${
+                  className={`rounded-xl border px-3 py-3 text-start transition ${
                     settings.clockStyle === option.value
                       ? 'border-[var(--accent-soft)] bg-white/10'
                       : 'border-[var(--card-line)] active:bg-white/5'
                   }`}
                 >
-                  <span className="block text-sm font-medium">{option.label}</span>
+                  <span className="block text-sm font-medium">{isArabic ? CLOCK_LABEL_AR[option.value] : option.label}</span>
                   <span
                     className={`tabular mt-1 block text-[var(--ink-dim)] clock-preview-${option.value}`}
                   >
-                    {option.sample}
+                    {isArabic ? CLOCK_SAMPLE_AR[option.value] : option.sample}
                   </span>
                 </button>
               ))}
@@ -97,16 +133,16 @@ export function SettingsContent() {
           </div>
 
           <div>
-            <span className="text-[13px] font-medium text-[var(--ink-dim)]">Dial</span>
+            <span className="text-[13px] font-medium text-[var(--ink-dim)]">{text('Dial', 'مؤشر العد التنازلي')}</span>
             <p className="mt-1 text-xs text-[var(--ink-faint)]">
-              The ring around the countdown, and how it moves.
+              {text('The ring around the countdown, and how it moves.', 'الحلقة المحيطة بالعد التنازلي وطريقة حركتها.')}
             </p>
             <div className="mt-2 grid grid-cols-2 gap-2">
               {DIAL_STYLES.map((option) => (
                 <button
                   key={option.value}
                   onClick={() => patchSettings({ dialStyle: option.value })}
-                  className={`rounded-xl border px-3 py-2.5 text-left transition ${
+                  className={`rounded-xl border px-3 py-2.5 text-start transition ${
                     settings.dialStyle === option.value
                       ? 'border-[var(--accent-soft)] bg-white/10'
                       : 'border-[var(--card-line)] active:bg-white/5'
@@ -117,9 +153,9 @@ export function SettingsContent() {
                       <Dial style={option.value} progress={0.68} seconds={0.42} />
                     </span>
                     <span className="min-w-0">
-                      <span className="block text-sm font-medium">{option.label}</span>
+                      <span className="block text-sm font-medium">{isArabic ? DIAL_AR[option.value].label : option.label}</span>
                       <span className="mt-0.5 block text-[11px] leading-tight text-[var(--ink-faint)]">
-                        {option.hint}
+                        {isArabic ? DIAL_AR[option.value].hint : option.hint}
                       </span>
                     </span>
                   </span>
@@ -129,16 +165,16 @@ export function SettingsContent() {
           </div>
 
           <div>
-            <span className="text-[13px] font-medium text-[var(--ink-dim)]">Prayer layout</span>
+            <span className="text-[13px] font-medium text-[var(--ink-dim)]">{text('Prayer layout', 'تنسيق المواقيت')}</span>
             <div className="mt-2 grid grid-cols-2 gap-2">
               {([
-                { value: 'list', label: 'List', hint: 'Stacked rows, with notes' },
-                { value: 'grid', label: 'Grid', hint: 'Six tiles, three across' },
+                { value: 'list', label: text('List', 'قائمة'), hint: text('Stacked rows, with notes', 'صفوف متتالية مع ملاحظات') },
+                { value: 'grid', label: text('Grid', 'شبكة'), hint: text('Six tiles, three across', 'ست بطاقات، ثلاث في كل صف') },
               ] as const).map((option) => (
                 <button
                   key={option.value}
                   onClick={() => patchSettings({ prayerLayout: option.value })}
-                  className={`rounded-xl border px-3 py-2.5 text-left transition ${
+                  className={`rounded-xl border px-3 py-2.5 text-start transition ${
                     settings.prayerLayout === option.value
                       ? 'border-[var(--accent-soft)] bg-white/10'
                       : 'border-[var(--card-line)] active:bg-white/5'
@@ -154,7 +190,7 @@ export function SettingsContent() {
           </div>
 
           <NotifySetting />
-          <Field label="Hijri adjustment" hint="Days, for local moon sighting.">
+          <Field label={text('Hijri adjustment', 'ضبط التاريخ الهجري')} hint={text('Days, for local moon sighting.', 'بالأيام، وفق رؤية الهلال المحلية.')}>
             <select
               className={selectClass}
               value={settings.hijriOffset}
@@ -162,7 +198,7 @@ export function SettingsContent() {
             >
               {[-2, -1, 0, 1, 2].map((d) => (
                 <option key={d} value={d}>
-                  {d > 0 ? `+${d}` : d} {Math.abs(d) === 1 ? 'day' : 'days'}
+                  {d > 0 ? `+${d}` : d} {isArabic ? 'يوم' : Math.abs(d) === 1 ? 'day' : 'days'}
                 </option>
               ))}
             </select>
@@ -173,16 +209,17 @@ export function SettingsContent() {
       {tab === 'iqama' && (
         <div className="space-y-6">
           <p className="text-xs leading-relaxed text-[var(--ink-faint)]">
-            Minutes from the adhan to the congregation. Awqaf's standard across the UAE is 20
-            minutes for Fajr, Dhuhr, Asr and Isha, and 5 for Maghrib — but mosques do vary, so set
-            yours here. Switch the board between the two with the toggle at the top.
+            {text(
+              "Minutes from the adhan to the congregation. Awqaf's standard across the UAE is 20 minutes for Fajr, Dhuhr, Asr and Isha, and 5 for Maghrib — but mosques do vary, so set yours here. Switch the board between the two with the toggle at the top.",
+              'عدد الدقائق بين الأذان والإقامة. معيار الأوقاف في الإمارات هو 20 دقيقة للفجر والظهر والعصر والعشاء، و5 دقائق للمغرب. قد تختلف المساجد، لذا اضبط مسجدك هنا، ثم بدّل بين الأذان والإقامة من أعلى صفحة المواقيت.',
+            )}
           </p>
           <div className="space-y-1.5">
             {PRAYER_ORDER.filter((k) => k !== 'sunrise').map((key) => (
               <div key={key} className="rounded-xl border border-[var(--card-line)] px-3 py-2.5">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">{PRAYER_META[key].en}</span>
-                  <IqamaPreview minutes={settings.iqamaOffsets[key] ?? 0} />
+                  <span className="text-sm font-medium">{isArabic ? PRAYER_META[key].ar : PRAYER_META[key].en}</span>
+                  <IqamaPreview minutes={settings.iqamaOffsets[key] ?? 0} language={settings.language} />
                 </div>
                 <div className="mt-1.5 flex items-center gap-3">
                   <input
@@ -193,16 +230,16 @@ export function SettingsContent() {
                     onChange={(e) => setIqamaOffset(key, Number(e.target.value))}
                     className="flex-1"
                   />
-                  <span className="tabular w-14 text-right text-sm text-[var(--ink-dim)]">
-                    +{settings.iqamaOffsets[key] ?? 0} m
+                  <span className="tabular w-14 text-end text-sm text-[var(--ink-dim)]">
+                    +{settings.iqamaOffsets[key] ?? 0} {text('m', 'د')}
                   </span>
                 </div>
               </div>
             ))}
           </div>
           <Field
-            label="Jumuʿah"
-            hint="Friday replaces Dhuhr, and the time is fixed by the authority rather than by an offset. The UAE default is 12:45."
+            label={text('Jumuʿah', 'الجمعة')}
+            hint={text('Friday replaces Dhuhr, and the time is fixed by the authority rather than by an offset. The UAE default is 12:45.', 'تحل صلاة الجمعة محل الظهر، وموعدها تحدده الجهة الرسمية بدلًا من إضافته كفارق زمني. الموعد الافتراضي في الإمارات هو 12:45.')}
           >
             <input
               type="time"
@@ -217,10 +254,11 @@ export function SettingsContent() {
       {tab === 'calculation' && (
         <div className="space-y-6">
           <Field
-            label="Method"
-            hint={`${method.summary} — used in ${method.region}.${
-              !methodPinned && place ? ` Auto-selected for ${place.country || place.countryCode}.` : ''
-            }`}
+            label={text('Method', 'طريقة الحساب')}
+            hint={text(
+              `${method.summary} — used in ${method.region}.${!methodPinned && place ? ` Auto-selected for ${place.country || place.countryCode}.` : ''}`,
+              `${methodSummary(method.summary)} — الطريقة المستخدمة لهذا الموقع.${!methodPinned && place ? ` تم اختيارها تلقائيًا لـ ${place.countryCode === 'AE' ? 'الإمارات العربية المتحدة' : place.country || place.countryCode}.` : ''}`,
+            )}
           >
             <select
               className={selectClass}
@@ -232,7 +270,7 @@ export function SettingsContent() {
             >
               {METHODS.map((m) => (
                 <option key={m.key} value={m.key}>
-                  {m.label}
+                  {methodLabel(m.key, m.label)}
                 </option>
               ))}
             </select>
@@ -246,14 +284,14 @@ export function SettingsContent() {
               }}
               className="-mt-3 block text-xs text-[var(--accent)] underline underline-offset-4"
             >
-              Use the method normally followed in {place.country || place.countryCode} (
-              {METHOD_BY_KEY.get(suggested)!.label})
+              {text('Use the method normally followed in', 'استخدم الطريقة المتبعة عادةً في')} {place.country || place.countryCode} (
+              {methodLabel(suggested, METHOD_BY_KEY.get(suggested)!.label)})
             </button>
           )}
 
           {settings.method === 'Custom' && (
             <div className="grid grid-cols-3 gap-3">
-              <Field label="Fajr angle">
+              <Field label={text('Fajr angle', 'زاوية الفجر')}>
                 <input
                   type="number"
                   step="0.1"
@@ -262,7 +300,7 @@ export function SettingsContent() {
                   onChange={(e) => patchSettings({ customFajrAngle: Number(e.target.value) })}
                 />
               </Field>
-              <Field label="Isha angle">
+              <Field label={text('Isha angle', 'زاوية العشاء')}>
                 <input
                   type="number"
                   step="0.1"
@@ -271,7 +309,7 @@ export function SettingsContent() {
                   onChange={(e) => patchSettings({ customIshaAngle: Number(e.target.value) })}
                 />
               </Field>
-              <Field label="Isha interval">
+              <Field label={text('Isha interval', 'فاصل العشاء')}>
                 <input
                   type="number"
                   className={selectClass}
@@ -283,23 +321,23 @@ export function SettingsContent() {
           )}
 
           <ChoiceCards
-            label="Asr — juristic school"
+            label={text('Asr — juristic school', 'العصر — المذهب الفقهي')}
             hint={
               settings.madhab === 'hanafi'
-                ? 'Asr when a shadow is twice the object’s length.'
-                : 'Asr when a shadow equals the object’s length.'
+                ? text('Asr when a shadow is twice the object’s length.', 'يدخل العصر عندما يبلغ الظل مثلي طول الجسم.')
+                : text('Asr when a shadow equals the object’s length.', 'يدخل العصر عندما يبلغ الظل طول الجسم.')
             }
             value={settings.madhab}
             options={[
-              { value: 'shafi', label: 'Standard' },
-              { value: 'hanafi', label: 'Hanafi' },
+              { value: 'shafi', label: text('Standard', 'المعيار المعتاد') },
+              { value: 'hanafi', label: text('Hanafi', 'حنفي') },
             ]}
             onChange={(madhab) => patchSettings({ madhab })}
           />
 
           <Field
-            label="High latitude rule"
-            hint="Only bites above roughly 48°, where twilight never fully ends in summer."
+            label={text('High latitude rule', 'قاعدة خطوط العرض العليا')}
+            hint={text('Only applies above roughly 48°, where twilight never fully ends in summer.', 'تُطبَّق تقريبًا فوق خط عرض 48°، حيث قد لا ينتهي الشفق تمامًا في الصيف.')}
           >
             <select
               className={selectClass}
@@ -310,23 +348,23 @@ export function SettingsContent() {
                 })
               }
             >
-              <option value="auto">Recommended for this location</option>
-              <option value="middleofthenight">Middle of the night</option>
-              <option value="seventhofthenight">One seventh of the night</option>
-              <option value="twilightangle">Angle based</option>
+              <option value="auto">{text('Recommended for this location', 'الموصى بها لهذا الموقع')}</option>
+              <option value="middleofthenight">{text('Middle of the night', 'منتصف الليل')}</option>
+              <option value="seventhofthenight">{text('One seventh of the night', 'سُبع الليل')}</option>
+              <option value="twilightangle">{text('Angle based', 'بحسب زاوية الشفق')}</option>
             </select>
           </Field>
 
           {settings.method === 'MoonsightingCommittee' && (
-            <Field label="Shafaq (Isha twilight)" hint="Only used by the Moonsighting Committee method.">
+            <Field label={text('Shafaq (Isha twilight)', 'الشفق (وقت العشاء)')} hint={text('Only used by the Moonsighting Committee method.', 'يُستخدم فقط مع طريقة لجنة رؤية الهلال.')}>
               <select
                 className={selectClass}
                 value={settings.shafaq}
                 onChange={(e) => patchSettings({ shafaq: e.target.value as typeof settings.shafaq })}
               >
-                <option value="general">General</option>
-                <option value="ahmer">Ahmer — red twilight</option>
-                <option value="abyad">Abyad — white twilight</option>
+                <option value="general">{text('General', 'عام')}</option>
+                <option value="ahmer">{text('Ahmer — red twilight', 'الأحمر — الشفق الأحمر')}</option>
+                <option value="abyad">{text('Abyad — white twilight', 'الأبيض — الشفق الأبيض')}</option>
               </select>
             </Field>
           )}
@@ -340,25 +378,27 @@ export function SettingsContent() {
           <div>
             <div className="flex items-baseline justify-between">
               <span className="text-[13px] font-medium text-[var(--ink-dim)]">
-                Manual correction
+                {text('Manual correction', 'التصحيح اليدوي')}
               </span>
               {offsetsUsed && (
                 <button
                   onClick={resetOffsets}
                   className="text-xs text-[var(--accent)] underline underline-offset-4"
                 >
-                  Clear all
+                  {text('Clear all', 'مسح الكل')}
                 </button>
               )}
             </div>
             <p className="mt-1 text-xs leading-relaxed text-[var(--ink-faint)]">
-              If your mosque calls a few minutes off the calculation, nudge it here. This is the
-              only way any app can match one specific mosque exactly.
+              {text(
+                'If your mosque calls a few minutes off the calculation, nudge it here. This is the only way any app can match one specific mosque exactly.',
+                'إذا كان أذان مسجدك يختلف بضع دقائق عن الحساب، فعدّل كل صلاة هنا. بهذه الطريقة يمكن مطابقة مسجد محدد بدقة.',
+              )}
             </p>
             <div className="mt-3 space-y-1.5">
               {PRAYER_ORDER.map((key) => (
                 <div key={key} className="flex items-center gap-3">
-                  <span className="w-16 text-sm">{PRAYER_META[key].en}</span>
+                  <span className="w-16 text-sm">{isArabic ? PRAYER_META[key].ar : PRAYER_META[key].en}</span>
                   <OffsetPreview minutes={settings.offsets[key]} />
                   <input
                     type="range"
@@ -368,7 +408,7 @@ export function SettingsContent() {
                     onChange={(e) => setOffset(key, Number(e.target.value))}
                     className="flex-1"
                   />
-                  <span className="tabular w-12 text-right text-sm text-[var(--ink-dim)]">
+                  <span className="tabular w-12 text-end text-sm text-[var(--ink-dim)]">
                     {settings.offsets[key] > 0 ? '+' : ''}
                     {settings.offsets[key]}
                   </span>
@@ -380,12 +420,12 @@ export function SettingsContent() {
           <div className="rounded-2xl border border-[var(--card-line)] p-4">
             <label className="flex items-center justify-between gap-4">
               <span>
-                <span className="block text-[13px] font-medium">Use my full height</span>
+                <span className="block text-[13px] font-medium">{text('Use my full height', 'استخدم الارتفاع الكامل لموقعي')}</span>
                 <span className="mt-0.5 block text-xs leading-relaxed text-[var(--ink-faint)]">
-                  Sunrise and Maghrib already allow for the terrain where your convention's
-                  authority accounts for it. Switch this on only if you are genuinely above the
-                  land around you — on a mountain rather than on a plateau — and it will use your
-                  full height above sea level instead.
+                  {text(
+                    "Sunrise and Maghrib already allow for the terrain where your convention's authority accounts for it. Switch this on only if you are genuinely above the land around you — on a mountain rather than on a plateau — and it will use your full height above sea level instead.",
+                    'تراعي مواقيت الشروق والمغرب تضاريس المنطقة عندما تعتمدها الجهة الرسمية. فعّل هذا الخيار فقط إذا كنت أعلى فعلًا من الأرض المحيطة، مثل وجودك على جبل، ليُستخدم ارتفاعك الكامل فوق سطح البحر.',
+                  )}
                 </span>
               </span>
               <input
@@ -405,7 +445,7 @@ export function SettingsContent() {
                   onChange={(e) => patchSettings({ elevation: Math.max(0, Number(e.target.value)) })}
                   className="w-28 rounded-xl border border-[var(--card-line)] bg-black/25 px-3 py-2 text-sm outline-none focus:border-[var(--accent-soft)]"
                 />
-                <span className="text-xs text-[var(--ink-dim)]">metres above sea level</span>
+                <span className="text-xs text-[var(--ink-dim)]">{text('metres above sea level', 'متر فوق سطح البحر')}</span>
               </div>
             )}
           </div>
@@ -416,8 +456,9 @@ export function SettingsContent() {
 }
 
 export function SettingsSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { text } = useI18n();
   return (
-    <Sheet open={open} title="Settings" onClose={onClose}>
+    <Sheet open={open} title={text('Settings', 'الإعدادات')} onClose={onClose}>
       <SettingsContent />
     </Sheet>
   );

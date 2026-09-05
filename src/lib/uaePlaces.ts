@@ -24,6 +24,47 @@ export const UAE_EMIRATES = [
   'Fujairah',
 ] as const;
 
+export const UAE_EMIRATE_AR: Record<(typeof UAE_EMIRATES)[number], string> = {
+  'Abu Dhabi': 'أبوظبي',
+  Dubai: 'دبي',
+  Sharjah: 'الشارقة',
+  Ajman: 'عجمان',
+  'Umm Al Quwain': 'أم القيوين',
+  'Ras Al Khaimah': 'رأس الخيمة',
+  Fujairah: 'الفجيرة',
+};
+
+const UAE_PLACE_AR: Record<string, string> = {
+  'Abu Dhabi': 'أبوظبي',
+  'Al Ain': 'العين',
+  'Madinat Zayed': 'مدينة زايد',
+  Ruwais: 'الرويس',
+  Liwa: 'ليوا',
+  Ghayathi: 'غياثي',
+  Mirfa: 'المرفأ',
+  'Delma Island': 'جزيرة دلما',
+  'Al Sila': 'السلع',
+  Dubai: 'دبي',
+  'Jebel Ali': 'جبل علي',
+  Hatta: 'حتا',
+  Sharjah: 'الشارقة',
+  'Khor Fakkan': 'خورفكان',
+  Kalba: 'كلباء',
+  Dhaid: 'الذيد',
+  Ajman: 'عجمان',
+  Masfout: 'مصفوت',
+  'Umm Al Quwain': 'أم القيوين',
+  'Ras Al Khaimah': 'رأس الخيمة',
+  'Al Rams': 'الرمس',
+  Fujairah: 'الفجيرة',
+  'Dibba Al-Fujairah': 'دبا الفجيرة',
+  Masafi: 'مسافي',
+};
+
+export function localizedUaeName(name: string, language: 'en' | 'ar'): string {
+  return language === 'ar' ? UAE_PLACE_AR[name] ?? name : name;
+}
+
 export const UAE_PLACES: UaePlace[] = [
   { name: 'Abu Dhabi', emirate: 'Abu Dhabi', latitude: 24.4539, longitude: 54.3773, elevation: 5 },
   { name: 'Al Ain', emirate: 'Abu Dhabi', latitude: 24.1917, longitude: 55.7606, elevation: 275 },
@@ -57,11 +98,14 @@ export const UAE_PLACES: UaePlace[] = [
   { name: 'Masafi', emirate: 'Fujairah', latitude: 25.2986, longitude: 56.1583, elevation: 250 },
 ];
 
-export function uaePlaceToPlace(entry: UaePlace): Place {
+export function uaePlaceToPlace(entry: UaePlace, language: 'en' | 'ar' = 'en'): Place {
   return {
-    name: entry.name,
-    admin: entry.emirate,
-    country: 'United Arab Emirates',
+    name: localizedUaeName(entry.name, language),
+    admin:
+      language === 'ar'
+        ? UAE_EMIRATE_AR[entry.emirate as keyof typeof UAE_EMIRATE_AR] ?? entry.emirate
+        : entry.emirate,
+    country: language === 'ar' ? 'الإمارات العربية المتحدة' : 'United Arab Emirates',
     countryCode: 'AE',
     latitude: entry.latitude,
     longitude: entry.longitude,

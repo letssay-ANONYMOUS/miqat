@@ -95,12 +95,13 @@ export function Segmented<T extends string>({
   );
 
   const clampToBar = useCallback(
-    (raw: number, width: number) => {
-      const first = buttons.current.get(options[0].value);
-      const last = buttons.current.get(options[options.length - 1].value);
-      const min = first?.offsetLeft ?? 0;
-      const max = last ? last.offsetLeft + last.offsetWidth - width : min;
-      return Math.min(Math.max(min, max) , Math.max(min, raw));
+    (raw: number) => {
+      const positions = options
+        .map((option) => buttons.current.get(option.value)?.offsetLeft)
+        .filter((left): left is number => left !== undefined);
+      const min = positions.length ? Math.min(...positions) : 0;
+      const max = positions.length ? Math.max(...positions) : min;
+      return Math.min(max, Math.max(min, raw));
     },
     [options],
   );
@@ -128,7 +129,7 @@ export function Segmented<T extends string>({
     g.moved = true;
     event.preventDefault();
 
-    const left = clampToBar(raw, lens.width);
+    const left = clampToBar(raw);
     setDrag({ left, over: optionAt(left, lens.width) });
 
     // Near an edge with more bar beyond it, scroll while the finger is held.
@@ -144,7 +145,7 @@ export function Segmented<T extends string>({
       const before = box.scrollLeft;
       box.scrollLeft += speed;
       if (box.scrollLeft === before) return; // hit the end
-      const next = clampToBar(pointerX + box.scrollLeft - g.grabDx, lens.width);
+      const next = clampToBar(pointerX + box.scrollLeft - g.grabDx);
       setDrag({ left: next, over: optionAt(next, lens.width) });
       autoScroll.current = requestAnimationFrame(step);
     };

@@ -26,10 +26,14 @@ interface OpenMeteoResult {
 }
 
 /** City search. Open-Meteo's geocoder is free, key-less and CORS-enabled. */
-export async function searchPlaces(query: string, signal?: AbortSignal): Promise<Place[]> {
+export async function searchPlaces(
+  query: string,
+  signal?: AbortSignal,
+  language: 'en' | 'ar' = 'en',
+): Promise<Place[]> {
   const trimmed = query.trim();
   if (trimmed.length < 2) return [];
-  const url = `${GEOCODE}?name=${encodeURIComponent(trimmed)}&count=8&language=en&format=json`;
+  const url = `${GEOCODE}?name=${encodeURIComponent(trimmed)}&count=8&language=${language}&format=json`;
   const res = await fetch(url, { signal });
   if (!res.ok) throw new Error(`Geocoder returned ${res.status}`);
   const data = (await res.json()) as { results?: OpenMeteoResult[] };
@@ -50,10 +54,11 @@ export async function searchPlaces(query: string, signal?: AbortSignal): Promise
 export async function describeCoordinates(
   latitude: number,
   longitude: number,
+  language: 'en' | 'ar' = 'en',
 ): Promise<{ name: string; admin?: string; country: string; countryCode: string }> {
   try {
     const res = await fetch(
-      `${REVERSE}?latitude=${latitude}&longitude=${longitude}&localityLanguage=en`,
+      `${REVERSE}?latitude=${latitude}&longitude=${longitude}&localityLanguage=${language}`,
     );
     if (!res.ok) throw new Error(String(res.status));
     const data = (await res.json()) as {
@@ -64,13 +69,13 @@ export async function describeCoordinates(
       countryCode?: string;
     };
     return {
-      name: data.city || data.locality || 'Current location',
+      name: data.city || data.locality || (language === 'ar' ? 'الموقع الحالي' : 'Current location'),
       admin: data.principalSubdivision,
       country: data.countryName ?? '',
       countryCode: data.countryCode ?? '',
     };
   } catch {
-    return { name: 'Current location', country: '', countryCode: '' };
+    return { name: language === 'ar' ? 'الموقع الحالي' : 'Current location', country: '', countryCode: '' };
   }
 }
 
@@ -103,11 +108,11 @@ export function currentPosition(): Promise<GeolocationPosition> {
 }
 
 /** GPS fix, enriched with a place name, timezone and elevation. */
-export async function locateMe(): Promise<Place> {
+export async function locateMe(language: 'en' | 'ar' = 'en'): Promise<Place> {
   const position = await currentPosition();
   const { latitude, longitude } = position.coords;
   const [described, elevation] = await Promise.all([
-    describeCoordinates(latitude, longitude),
+    describeCoordinates(latitude, longitude, language),
     lookupElevation(latitude, longitude),
   ]);
   return {

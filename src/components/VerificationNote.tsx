@@ -1,6 +1,8 @@
 import { METHOD_BY_KEY } from '../lib/methods';
 import { publishedCityFor } from '../lib/officialTimetable';
 import { useStore } from '../lib/store';
+import { useI18n } from '../lib/i18n';
+import { localizedUaeName } from '../lib/uaePlaces';
 
 /**
  * Says plainly whether this convention has been proved against its own
@@ -13,6 +15,9 @@ export function VerificationNote() {
   const method = METHOD_BY_KEY.get(settings.method)!;
   const verified = method.verifiedAgainst;
   const publishedCity = place ? publishedCityFor(place.latitude, place.longitude) : null;
+  const { language, locale, text, methodLabel } = useI18n();
+  const shownCity = publishedCity ? localizedUaeName(publishedCity, language) : null;
+  const shownMethod = methodLabel(method.key, method.label);
 
   return (
     <div
@@ -24,33 +29,29 @@ export function VerificationNote() {
     >
       <p className="text-sm font-medium">
         {publishedCity
-          ? `Showing Awqaf's published timetable for ${publishedCity}`
+          ? text(`Showing Awqaf's published timetable for ${publishedCity}`, `عرض جدول الأوقاف المنشور لمدينة ${shownCity}`)
           : verified
-            ? `${method.label} is verified`
-            : `${method.label} is not yet verified`}
+            ? text(`${method.label} is verified`, `تم التحقق من طريقة ${shownMethod}`)
+            : text(`${method.label} is not yet verified`, `لم يتم التحقق من طريقة ${shownMethod} بعد`)}
       </p>
       <p className="mt-1 text-xs leading-relaxed text-[var(--ink-dim)]">
         {publishedCity ? (
           <>
-            These are the authority's own times, carried in the app rather than calculated — so
-            they match what your mosque calls exactly, including every seasonal adjustment Awqaf
-            makes. Days they have not published yet fall back to the calculation, and the app says
-            so when that happens. Every day shipped was checked against a second publisher before
-            it went in.
+            {text("These are the authority's own times, carried in the app rather than calculated — so they match what your mosque calls exactly, including every seasonal adjustment Awqaf makes. Days they have not published yet fall back to the calculation, and the app says so when that happens. Every day shipped was checked against a second publisher before it went in.", 'هذه مواقيت الجهة الرسمية محفوظة داخل التطبيق وليست محسوبة، لذلك تطابق أذان مسجدك وتشمل تعديلات الأوقاف الموسمية. عند غياب يوم منشور يعود التطبيق إلى الحساب الفلكي ويوضح ذلك. تمت مطابقة كل يوم مضمّن مع ناشر ثانٍ قبل إضافته.')}
           </>
         ) : verified ? (
           <>
-            Checked against {verified.authority}: every one of{' '}
-            {verified.comparisons.toLocaleString()} published times matched within a minute, and it
-            is re-checked every day.
+            {text(
+              `Checked against ${verified.authority}: every one of ${verified.comparisons.toLocaleString()} published times matched within a minute, and it is re-checked every day.`,
+              `تمت المقارنة مع ${verified.authority}: تطابقت المواقيت المنشورة البالغ عددها ${verified.comparisons.toLocaleString(locale)} كلها ضمن دقيقة واحدة، ويُعاد الفحص يوميًا.`,
+            )}
           </>
         ) : (
           <>
-            The astronomy is identical everywhere and the angles come from this convention's
-            published parameters, so these times should be right. But nobody has yet compared them
-            against a timetable published by the authority in {method.region}, so this app will
-            not claim they match what your mosque calls. If they differ, the manual correction
-            under Settings → Fine tune will fix it exactly.
+            {text(
+              `The astronomy is identical everywhere and the angles come from this convention's published parameters, so these times should be right. But nobody has yet compared them against a timetable published by the authority in ${method.region}, so this app will not claim they match what your mosque calls. If they differ, the manual correction under Settings → Fine tune will fix it exactly.`,
+              `الحساب الفلكي واحد في كل مكان، والزوايا مأخوذة من المعايير المنشورة لهذه الطريقة، لذا يُفترض أن تكون المواقيت صحيحة. لكنها لم تُقارن بعد بجدول صادر عن الجهة الرسمية في ${method.region}، لذلك لا يدّعي التطبيق أنها تطابق أذان مسجدك. إذا اختلفت، استخدم التصحيح اليدوي ضمن الإعدادات ← الضبط.`,
+            )}
           </>
         )}
       </p>

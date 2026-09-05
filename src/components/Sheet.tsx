@@ -1,5 +1,6 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 import { useRubberBand } from '../lib/feel';
+import { useI18n } from '../lib/i18n';
 
 interface SheetProps {
   open: boolean;
@@ -10,6 +11,7 @@ interface SheetProps {
 }
 
 export function Sheet({ open, title, subtitle, onClose, children }: SheetProps) {
+  const { text } = useI18n();
   const body = useRef<HTMLDivElement>(null);
   useRubberBand(body, 'self');
   useEffect(() => {
@@ -30,7 +32,7 @@ export function Sheet({ open, title, subtitle, onClose, children }: SheetProps) 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
       <button
-        aria-label="Close"
+        aria-label={text('Close', 'إغلاق')}
         onClick={onClose}
         className="absolute inset-0 bg-black/55 backdrop-blur-sm"
       />
@@ -47,8 +49,8 @@ export function Sheet({ open, title, subtitle, onClose, children }: SheetProps) 
           </div>
           <button
             onClick={onClose}
-            className="-mr-1.5 -mt-1 rounded-full p-2 text-[var(--ink-dim)] transition hover:bg-white/10 hover:text-[var(--ink)]"
-            aria-label="Close"
+            className="-me-1.5 -mt-1 rounded-full p-2 text-[var(--ink-dim)] transition hover:bg-white/10 hover:text-[var(--ink)]"
+            aria-label={text('Close', 'إغلاق')}
           >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
               <path

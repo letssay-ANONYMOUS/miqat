@@ -1,5 +1,6 @@
 import { countdown, formatCountdown, formatTime } from '../lib/time';
 import type { Settings } from '../lib/prayer';
+import { localeFor, localize } from '../lib/i18n';
 
 export type ClockStyle = 'light' | 'serif' | 'mono' | 'words' | 'target';
 
@@ -28,6 +29,7 @@ export function Countdown({
   settings: Settings;
 }) {
   const style = settings.clockStyle;
+  const language = settings.language;
   const { hours, minutes } = countdown(msRemaining);
 
   if (style === 'words') {
@@ -36,11 +38,11 @@ export function Countdown({
         {hours > 0 && (
           <>
             <span className="tabular">{hours}</span>
-            <span className="unit"> hr </span>
+            <span className="unit"> {localize(language, 'hr', 'س')} </span>
           </>
         )}
         <span className="tabular">{minutes}</span>
-        <span className="unit"> min</span>
+        <span className="unit"> {localize(language, 'min', 'د')}</span>
       </p>
     );
   }
@@ -49,10 +51,10 @@ export function Countdown({
     return (
       <div className="text-center">
         <p className="tabular clock-target leading-none">
-          {formatTime(at, timezone, settings.timeFormat)}
+          {formatTime(at, timezone, settings.timeFormat, localeFor(language))}
         </p>
         <p className="tabular mt-2 text-sm text-[var(--ink-dim)]">
-          in {formatCountdown(msRemaining)}
+          {localize(language, 'in', 'متبقي')} {formatCountdown(msRemaining)}
         </p>
       </div>
     );

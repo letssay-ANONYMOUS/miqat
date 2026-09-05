@@ -9,8 +9,10 @@ import {
 } from '../lib/quran';
 import { playAyah, stopAyah } from '../lib/recite';
 import { useStore } from '../lib/store';
+import { useI18n } from '../lib/i18n';
 
 export function QuranPage({ onReading }: { onReading?: (reading: boolean) => void }) {
+  const { text } = useI18n();
   const [data, setData] = useState<QuranBundle | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
@@ -24,18 +26,18 @@ export function QuranPage({ onReading }: { onReading?: (reading: boolean) => voi
         if (alive) setData(bundle);
       })
       .catch(() => {
-        if (alive) setError('The Qur’an file could not be opened.');
+        if (alive) setError(text('The Qur’an file could not be opened.', 'تعذر فتح ملف القرآن الكريم.'));
       });
     return () => {
       alive = false;
     };
-  }, []);
+  }, [text]);
 
   if (error) {
     return <p className="px-1 py-8 text-sm text-[var(--ink-dim)]">{error}</p>;
   }
   if (!data) {
-    return <p className="px-1 py-8 text-sm text-[var(--ink-faint)]">Opening the mushaf…</p>;
+    return <p className="px-1 py-8 text-sm text-[var(--ink-faint)]">{text('Opening the mushaf…', 'جارٍ فتح المصحف…')}</p>;
   }
 
   if (open) {
@@ -83,6 +85,7 @@ function Index({
   onOpen: (n: number, ayah?: number) => void;
 }) {
   const bookmark = useStore((s) => s.quranBookmark);
+  const { isArabic, text } = useI18n();
   const q = query.trim().toLowerCase();
   const list = useMemo(() => {
     if (!q) return data.surahs;
@@ -100,22 +103,22 @@ function Index({
   return (
     <section className="quran-index flex flex-1 flex-col py-3">
       <header className="px-1">
-        <h1 className="text-2xl font-semibold tracking-tight">Qur’an</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">{text('Qur’an', 'القرآن الكريم')}</h1>
         <p className="mt-1 text-[13px] leading-relaxed text-[var(--ink-dim)]">
-          Uthmani script from Tanzil, Hafs. The English is a translation, not the Qur’an.
+          {text('Uthmani script from Tanzil, Hafs. The English is a translation, not the Qur’an.', 'نص عثماني برواية حفص من تنزيل. النص الإنجليزي ترجمة للمعاني وليس قرآنًا.')}
         </p>
       </header>
 
       {marked && (
         <button
           onClick={() => onOpen(marked.n, bookmark!.ayah)}
-          className="card mt-4 w-full rounded-3xl px-5 py-4 text-left"
+          className="card mt-4 w-full rounded-3xl px-5 py-4 text-start"
         >
-          <p className="text-[11px] uppercase tracking-[0.16em] text-[var(--ink-faint)]">Continue</p>
+          <p className="text-[11px] uppercase tracking-[0.16em] text-[var(--ink-faint)]">{text('Continue', 'متابعة القراءة')}</p>
           <p className="mt-1 flex items-baseline justify-between gap-3">
             <span className="font-medium">
-              {marked.tname}
-              <span className="arabic mr-0 ml-2 text-[var(--accent)]">{marked.name}</span>
+              {isArabic ? marked.name : marked.tname}
+              <span className="arabic ms-2 text-[var(--accent)]">{isArabic ? marked.tname : marked.name}</span>
             </span>
             <span className="tabular text-[13px] text-[var(--ink-dim)]">
               {marked.n}:{bookmark!.ayah}
@@ -128,7 +131,7 @@ function Index({
         type="search"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
-        placeholder="Search a surah"
+        placeholder={text('Search a surah', 'ابحث عن سورة')}
         className="card mt-3 w-full rounded-2xl border-0 bg-[var(--card)] px-4 py-3 text-[15px] outline-none placeholder:text-[var(--ink-faint)]"
       />
 
@@ -137,27 +140,29 @@ function Index({
           <li key={s.n}>
             <button
               onClick={() => onOpen(s.n)}
-              className="flex w-full items-center gap-3 px-4 py-3 text-left transition active:bg-white/8"
+              className="flex w-full items-center gap-3 px-4 py-3 text-start transition active:bg-white/8"
             >
               <span className="tabular w-7 shrink-0 text-[13px] text-[var(--ink-faint)]">{s.n}</span>
               <span className="min-w-0 flex-1">
-                <span className="block font-medium">{s.tname}</span>
+                <span className="block font-medium">{isArabic ? s.name : s.tname}</span>
                 <span className="block text-[12px] text-[var(--ink-dim)]">
-                  {s.ename} · {s.type} · {s.ar.length}
+                  {isArabic
+                    ? `${s.tname} · ${s.type === 'Meccan' ? 'مكية' : 'مدنية'} · عدد الآيات: ${s.ar.length}`
+                    : `${s.ename} · ${s.type} · ${s.ar.length}`}
                 </span>
               </span>
-              <span className="arabic text-lg text-[var(--ink)]">{s.name}</span>
+              {!isArabic && <span className="arabic text-lg text-[var(--ink)]">{s.name}</span>}
             </button>
           </li>
         ))}
       </ol>
 
       <p className="mt-4 px-1 text-[11px] leading-relaxed text-[var(--ink-faint)]">
-        Arabic: Tanzil.net Uthmani, CC BY 3.0 — the wording is not edited.{' '}
+        {text('Arabic: Tanzil.net Uthmani, CC BY 3.0 — the wording is not edited.', 'العربية: النص العثماني من Tanzil.net بترخيص CC BY 3.0، ولم تُعدّل ألفاظه.')}{' '}
         <a href="https://tanzil.net" className="underline underline-offset-4" target="_blank" rel="noreferrer">
           tanzil.net
         </a>
-        . English: Saheeh International.
+        {text('. English: Saheeh International.', '. الإنجليزية: ترجمة صحيح إنترناشونال.')}
       </p>
     </section>
   );
@@ -181,6 +186,7 @@ function Reader({
   onReading?: (reading: boolean) => void;
 }) {
   const { quranReciter, setQuranReciter, setQuranBookmark } = useStore();
+  const { isArabic, text } = useI18n();
   const dragY = useRef(0);
   const lastScroll = useRef(0);
   const [selected, setSelected] = useState(startAyah);
@@ -283,14 +289,14 @@ function Reader({
   return (
     <div className={`mushaf-page${leaving ? ' is-leaving' : ''}`}>
       <header className={`mushaf-chrome${chromeOn ? '' : ' is-away'}`}>
-        <button type="button" className="mushaf-back" onClick={onBack} aria-label="Surahs">
-          ←
+        <button type="button" className="mushaf-back" onClick={onBack} aria-label={text('Surahs', 'السور')}>
+          {isArabic ? '→' : '←'}
         </button>
         <h1 className="arabic mushaf-title">{`سورة ${surah.name}`}</h1>
         <button
           type="button"
           className="mushaf-recite-toggle"
-          aria-label={tray ? 'Hide reciter' : 'Show reciter'}
+          aria-label={tray ? text('Hide reciter', 'إخفاء القارئ') : text('Show reciter', 'إظهار القارئ')}
           aria-pressed={tray}
           onClick={() => setTray((v) => !v)}
         >
@@ -365,7 +371,7 @@ function Reader({
           <select
             className="mushaf-reciter"
             value={reciter.id}
-            aria-label="Reciter"
+            aria-label={text('Reciter', 'القارئ')}
             onChange={(e) => {
               const next = RECITERS.find((r) => r.id === e.target.value);
               if (next) onReciter(next.id);
@@ -382,13 +388,13 @@ function Reader({
             className="mushaf-play"
             onClick={() => (playing ? stop() : play(selected))}
           >
-            {playing ? 'Pause' : 'Recite this ayah'}
+            {playing ? text('Pause', 'إيقاف مؤقت') : text('Recite this ayah', 'تلاوة هذه الآية')}
           </button>
         </div>
         <p className="mushaf-tray-en">{surah.en[selected - 1]}</p>
-        <p className="mushaf-tray-note">This ayah only · Saheeh International</p>
+        <p className="mushaf-tray-note">{text('This ayah only · Saheeh International', 'هذه الآية فقط · ترجمة صحيح إنترناشونال')}</p>
         <button type="button" className="mushaf-tray-close" onClick={() => setTray(false)}>
-          Close
+          {text('Close', 'إغلاق')}
         </button>
       </div>
       )}

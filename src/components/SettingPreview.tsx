@@ -37,7 +37,7 @@ export function LayoutPreview({ variant }: { variant: 'list' | 'grid' }) {
 }
 
 /** Adhan, the gap, then the congregation — the thing the offsets control. */
-export function IqamaPreview({ minutes }: { minutes: number }) {
+export function IqamaPreview({ minutes, language = 'en' }: { minutes: number; language?: 'en' | 'ar' }) {
   const span = Math.min(1, minutes / 30);
   return (
     <svg viewBox="0 0 108 26" className="h-6 w-[108px]" aria-hidden="true">
@@ -55,10 +55,10 @@ export function IqamaPreview({ minutes }: { minutes: number }) {
       <circle cx="8" cy="17" r="3.5" fill={ink} />
       <circle cx={8 + 92 * span} cy="17" r="3.5" fill={accent} />
       <text x="8" y="8" fontSize="7" fill={ink} textAnchor="start">
-        adhan
+        {language === 'ar' ? 'أذان' : 'adhan'}
       </text>
       <text x={Math.min(100, 8 + 92 * span)} y="8" fontSize="7" fill={accent} textAnchor="end">
-        iqama
+        {language === 'ar' ? 'إقامة' : 'iqama'}
       </text>
     </svg>
   );
@@ -77,11 +77,11 @@ export function OffsetPreview({ minutes }: { minutes: number }) {
 }
 
 /** Twelve/twenty-four hour, shown as the face rather than described. */
-export function ClockFormatPreview({ format }: { format: '24h' | '12h' }) {
+export function ClockFormatPreview({ format, language = 'en' }: { format: '24h' | '12h'; language?: 'en' | 'ar' }) {
   return (
     <svg viewBox="0 0 64 26" className="h-[26px] w-16" aria-hidden="true">
       <text x="32" y="19" fontSize={format === '24h' ? 17 : 14} fill={ink} textAnchor="middle" fontFamily="ui-sans-serif, system-ui" style={{ fontVariantNumeric: 'tabular-nums' }}>
-        {format === '24h' ? '18:41' : '6:41 PM'}
+        {format === '24h' ? '18:41' : language === 'ar' ? '6:41 م' : '6:41 PM'}
       </text>
     </svg>
   );

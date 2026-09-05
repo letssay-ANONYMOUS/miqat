@@ -40,26 +40,34 @@ export function dayAnchor(tz: string, dayOffset = 0, instant: Date = new Date())
   return new Date(year, month - 1, day + dayOffset, 12);
 }
 
-export function formatTime(date: Date, tz: string, format: '24h' | '12h'): string {
+export function formatTime(
+  date: Date,
+  tz: string,
+  format: '24h' | '12h',
+  locale = 'en-GB',
+): string {
   return formatter(tz, {
     hour: '2-digit',
     minute: '2-digit',
     hour12: format === '12h',
-  })
+  }, locale)
     .format(date)
     .replace(/\s?(am|pm)/i, (m) => m.toUpperCase());
 }
 
-export function formatLongDate(date: Date, tz: string): string {
-  return formatter(tz, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(
+export function formatLongDate(date: Date, tz: string, locale = 'en-GB'): string {
+  return formatter(tz, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }, locale).format(
     date,
   );
 }
 
-export function formatHijri(date: Date, tz: string, offsetDays = 0): string {
+export function formatHijri(date: Date, tz: string, offsetDays = 0, language: 'en' | 'ar' = 'en'): string {
   const shifted = new Date(date.getTime() + offsetDays * 86_400_000);
   try {
-    return new Intl.DateTimeFormat('en-TN-u-ca-islamic-umalqura', {
+    const locale = language === 'ar'
+      ? 'ar-SA-u-ca-islamic-umalqura-nu-latn'
+      : 'en-TN-u-ca-islamic-umalqura';
+    return new Intl.DateTimeFormat(locale, {
       timeZone: tz,
       day: 'numeric',
       month: 'long',
@@ -86,8 +94,13 @@ export function formatCountdown(ms: number): string {
 }
 
 /** "in 2 h 14 min" style, for screen readers and secondary labels. */
-export function humanRemaining(ms: number): string {
+export function humanRemaining(ms: number, language: 'en' | 'ar' = 'en'): string {
   const { hours, minutes } = countdown(ms);
+  if (language === 'ar') {
+    if (hours === 0 && minutes === 0) return 'أقل من دقيقة';
+    if (hours === 0) return `${minutes} د`;
+    return `${hours} س ${minutes} د`;
+  }
   if (hours === 0 && minutes === 0) return 'less than a minute';
   if (hours === 0) return `${minutes} min`;
   return `${hours} h ${minutes} min`;

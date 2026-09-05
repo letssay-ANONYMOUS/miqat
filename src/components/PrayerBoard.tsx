@@ -1,5 +1,6 @@
 import { PRAYER_META, PRAYER_ORDER, type DayTimes, type PrayerKey, type Settings } from '../lib/prayer';
 import { formatTime } from '../lib/time';
+import { localeFor, localize } from '../lib/i18n';
 
 interface BoardProps {
   day: DayTimes;
@@ -16,6 +17,7 @@ interface BoardProps {
 }
 
 function rowState(props: BoardProps, key: PrayerKey) {
+  const arabic = props.settings.language === 'ar';
   const time = props.day.times[key];
   return {
     time,
@@ -24,21 +26,30 @@ function rowState(props: BoardProps, key: PrayerKey) {
     passed: time.getTime() <= props.now.getTime(),
     offset: props.settings.offsets[key],
     noCongregation: props.iqama && props.settings.iqamaOffsets[key] === null,
-    label: props.friday && key === 'dhuhr' && props.iqama ? 'Jumuʿah' : PRAYER_META[key].en,
-    arabic: props.friday && key === 'dhuhr' && props.iqama ? 'الجمعة' : PRAYER_META[key].ar,
+    label: arabic
+      ? props.friday && key === 'dhuhr' && props.iqama ? 'الجمعة' : PRAYER_META[key].ar
+      : props.friday && key === 'dhuhr' && props.iqama ? 'Jumuʿah' : PRAYER_META[key].en,
+    secondary: arabic
+      ? props.friday && key === 'dhuhr' && props.iqama ? 'Jumuʿah' : PRAYER_META[key].en
+      : props.friday && key === 'dhuhr' && props.iqama ? 'الجمعة' : PRAYER_META[key].ar,
   };
 }
 
 function rowNote(props: BoardProps, key: PrayerKey): string {
   const state = rowState(props, key);
-  if (state.noCongregation) return 'No congregation';
-  if (state.isCurrent) return 'Now';
+  const language = props.settings.language;
+  if (state.noCongregation) return localize(language, 'No congregation', 'لا توجد إقامة');
+  if (state.isCurrent) return localize(language, 'Now', 'الآن');
   if (props.iqama && props.settings.iqamaOffsets[key] !== null) {
     return props.friday && key === 'dhuhr'
-      ? 'Fixed by the authority'
-      : `${props.settings.iqamaOffsets[key]} min after the adhan`;
+      ? localize(language, 'Fixed by the authority', 'موعد محدد من الجهة الرسمية')
+      : localize(
+          language,
+          `${props.settings.iqamaOffsets[key]} min after the adhan`,
+          `بعد الأذان بـ ${props.settings.iqamaOffsets[key]} دقيقة`,
+        );
   }
-  return PRAYER_META[key].note;
+  return language === 'ar' ? PRAYER_META[key].noteAr : PRAYER_META[key].note;
 }
 
 /** The stacked list: one row per prayer, with room for the explanatory note. */
@@ -71,7 +82,7 @@ function ListBoard(props: BoardProps) {
               >
                 {state.label}
                 <span className="arabic text-sm font-normal text-[var(--ink-faint)]">
-                  {state.arabic}
+                  {state.secondary}
                 </span>
                 {state.offset !== 0 && (
                   <span className="tabular rounded-md bg-white/10 px-1.5 py-0.5 text-[10px] text-[var(--ink-dim)]">
@@ -83,9 +94,9 @@ function ListBoard(props: BoardProps) {
               <span className="block truncate text-[11px] text-[var(--ink-faint)] sm:text-xs">
                 {props.iqama && !state.noCongregation ? (
                   <>
-                    adhan{' '}
+                    {localize(props.settings.language, 'adhan', 'الأذان')}{' '}
                     <span className="tabular text-[var(--ink-dim)]">
-                      {formatTime(props.adhanDay.times[key], props.timezone, props.settings.timeFormat)}
+                      {formatTime(props.adhanDay.times[key], props.timezone, props.settings.timeFormat, localeFor(props.settings.language))}
                     </span>{' '}
                     · {rowNote(props, key)}
                   </>
@@ -95,7 +106,7 @@ function ListBoard(props: BoardProps) {
               </span>
             </span>
             <span
-              className={`tabular w-[4.5rem] shrink-0 text-right text-[17px] sm:w-[5rem] sm:text-lg ${
+              className={`tabular w-[4.5rem] shrink-0 text-end text-[17px] sm:w-[5rem] sm:text-lg ${
                 state.isNext
                   ? 'font-semibold text-[var(--accent)]'
                   : state.noCongregation
@@ -105,7 +116,7 @@ function ListBoard(props: BoardProps) {
                       : ''
               }`}
             >
-              {formatTime(state.time, props.timezone, props.settings.timeFormat)}
+              {formatTime(state.time, props.timezone, props.settings.timeFormat, localeFor(props.settings.language))}
             </span>
           </div>
         );
@@ -128,7 +139,7 @@ function GridBoard(props: BoardProps) {
             }`}
           >
             {state.isNext && (
-              <span className="absolute right-2.5 top-2.5 h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
+              <span className="absolute end-2.5 top-2.5 h-1.5 w-1.5 rounded-full bg-[var(--accent)]" />
             )}
             <span
               className={`text-[13px] font-medium leading-tight sm:text-sm ${
@@ -138,7 +149,7 @@ function GridBoard(props: BoardProps) {
               {state.label}
             </span>
             <span className="arabic mt-0.5 text-[11px] text-[var(--ink-faint)]">
-              {state.arabic}
+              {state.secondary}
             </span>
             <span
               className={`tabular mt-1.5 text-[19px] leading-none sm:text-xl ${
@@ -151,22 +162,24 @@ function GridBoard(props: BoardProps) {
                       : ''
               }`}
             >
-              {formatTime(state.time, props.timezone, props.settings.timeFormat)}
+              {formatTime(state.time, props.timezone, props.settings.timeFormat, localeFor(props.settings.language))}
             </span>
             {props.iqama && !state.noCongregation && (
               <span className="tabular mt-1 text-[10px] leading-tight text-[var(--ink-faint)]">
-                adhan {formatTime(props.adhanDay.times[key], props.timezone, props.settings.timeFormat)}
+                {localize(props.settings.language, 'adhan', 'الأذان')} {formatTime(props.adhanDay.times[key], props.timezone, props.settings.timeFormat, localeFor(props.settings.language))}
               </span>
             )}
             {(state.noCongregation || state.isCurrent) && (
               <span className="mt-1 text-[10px] leading-tight text-[var(--ink-faint)]">
-                {state.noCongregation ? 'no congregation' : 'now'}
+                {state.noCongregation
+                  ? localize(props.settings.language, 'no congregation', 'لا توجد إقامة')
+                  : localize(props.settings.language, 'now', 'الآن')}
               </span>
             )}
             {state.offset !== 0 && (
               <span className="tabular absolute bottom-2 text-[10px] text-[var(--ink-faint)]">
                 {state.offset > 0 ? '+' : ''}
-                {state.offset} min
+                {state.offset} {localize(props.settings.language, 'min', 'د')}
               </span>
             )}
           </div>
