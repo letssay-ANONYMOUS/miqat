@@ -1,6 +1,6 @@
 {
-  "name": "Miqāt",
-  "short_name": "Miqāt",
+  "name": "Miq\u0101t",
+  "short_name": "Miq\u0101t",
   "description": "Prayer times from the sun, on your device.",
   "start_url": "/",
   "display": "standalone",
@@ -10,13 +10,20 @@
     {
       "src": "/icon-192.png",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
     },
     {
       "src": "/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ]
 }

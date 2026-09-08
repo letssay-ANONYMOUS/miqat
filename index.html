@@ -15,20 +15,23 @@
     <meta property="og:url" content="https://miqat-sepia.vercel.app/" />
     <meta property="og:title" content="Miqāt — Prayer Times" />
     <meta property="og:description" content="Prayer times from the sun, on your device." />
-    <meta property="og:image" content="https://miqat-sepia.vercel.app/miqat-share-icon-20260905.png" />
-    <meta property="og:image:secure_url" content="https://miqat-sepia.vercel.app/miqat-share-icon-20260905.png" />
+    <meta property="og:image" content="https://miqat-sepia.vercel.app/miqat-share-20260908.png" />
+    <meta property="og:image:secure_url" content="https://miqat-sepia.vercel.app/miqat-share-20260908.png" />
     <meta property="og:image:type" content="image/png" />
     <meta property="og:image:width" content="512" />
     <meta property="og:image:height" content="512" />
     <meta property="og:image:alt" content="Miqāt crescent, mosque, and prayer clock icon" />
-    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="Miqāt — Prayer Times" />
     <meta name="twitter:description" content="Prayer times from the sun, on your device." />
-    <meta name="twitter:image" content="https://miqat-sepia.vercel.app/miqat-share-icon-20260905.png" />
+    <meta name="twitter:image" content="https://miqat-sepia.vercel.app/miqat-share-20260908.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
     <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon-180x180.png" />
+    <link rel="apple-touch-icon" sizes="167x167" href="/apple-touch-icon-167x167.png" />
+    <link rel="apple-touch-icon" sizes="152x152" href="/apple-touch-icon-152x152.png" />
+    <link rel="apple-touch-icon" sizes="120x120" href="/apple-touch-icon-120x120.png" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <link rel="apple-touch-icon-precomposed" sizes="180x180" href="/apple-touch-icon-180x180-precomposed.png" />
     <title>Miqāt — Prayer Times</title>
@@ -38,8 +41,37 @@
       href="https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500;600;700&family=Amiri:wght@400;700&family=Amiri+Quran&family=Instrument+Serif:ital@0;1&display=swap"
       rel="stylesheet"
     />
+    <style>
+      #boot {
+        position: fixed;
+        inset: 0;
+        z-index: 9999;
+        display: grid;
+        place-items: center;
+        background:
+          radial-gradient(120% 80% at 50% 108%, #1b2846 0%, transparent 62%),
+          linear-gradient(180deg, #04060d 0%, #0c1322 100%);
+        transition: opacity 0.45s ease;
+      }
+      #boot img {
+        width: 96px;
+        height: 96px;
+        border-radius: 22px;
+        box-shadow: 0 18px 50px rgb(0 0 0 / 0.5);
+        animation: boot-in 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+      }
+      @keyframes boot-in {
+        from { opacity: 0; transform: scale(0.9); }
+        to { opacity: 1; transform: none; }
+      }
+      #boot.is-done { opacity: 0; pointer-events: none; }
+      @media (prefers-reduced-motion: reduce) {
+        #boot img { animation: none; }
+      }
+    </style>
   </head>
   <body>
+    <div id="boot"><img src="/apple-touch-icon-180x180.png" alt="" /></div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
