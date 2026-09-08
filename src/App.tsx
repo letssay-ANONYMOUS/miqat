@@ -40,6 +40,7 @@ import { track } from './lib/analytics';
 import { isNowPlaying, startNowPlaying, stopNowPlaying, update as updateNowPlaying } from './lib/nowPlaying';
 import { useI18n } from './lib/i18n';
 import { localizedUaeName } from './lib/uaePlaces';
+import { DevotionsPage } from './components/DevotionsPage';
 
 type SheetName = 'location' | 'verify';
 
@@ -56,6 +57,8 @@ export default function App() {
   useRubberBand(scroller);
   const [page, setPage] = useState<Page>('times');
   const [quranReading, setQuranReading] = useState(false);
+  const [devotionsOpen, setDevotionsOpen] = useState(false);
+  const [quranRequest, setQuranRequest] = useState<{ surah: number; token: number } | null>(null);
 
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 1000);
@@ -255,6 +258,12 @@ export default function App() {
           </button>
 
           <nav className="flex shrink-0 items-center">
+            <IconButton label={text('Dhikr and daily rituals', 'الذكر والأذكار اليومية')} onClick={() => setDevotionsOpen(true)}>
+              <circle cx="6" cy="6" r="2.1" stroke="currentColor" strokeWidth="1.5" />
+              <circle cx="14" cy="6" r="2.1" stroke="currentColor" strokeWidth="1.5" />
+              <circle cx="10" cy="13.7" r="2.1" stroke="currentColor" strokeWidth="1.5" />
+              <path d="M7.8 7.2l1.3 4.5M12.2 7.2l-1.3 4.5M8.1 14.8l-2.7 2" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" />
+            </IconButton>
             <IconButton label={text('Accuracy', 'الدقة')} onClick={() => setSheet('verify')}>
               <path d="M10 2.5l6 2.5v5c0 3.4-2.4 6.4-6 7.5-3.6-1.1-6-4.1-6-7.5V5l6-2.5z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
               <path d="M7.5 10l1.8 1.8L13 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
@@ -418,7 +427,7 @@ export default function App() {
 
         {page === 'quran' && (
           <section className={quranReading ? '' : 'flex-1 py-2'}>
-            <QuranPage onReading={setQuranReading} />
+            <QuranPage onReading={setQuranReading} openRequest={quranRequest} />
           </section>
         )}
 
@@ -442,6 +451,17 @@ export default function App() {
       <LocationSheet open={sheet === 'location'} onClose={() => setSheet(null)} />
       <VerifySheet open={sheet === 'verify'} onClose={() => setSheet(null)} />
       <TabBar page={page} onChange={setPage} />
+      {devotionsOpen && (
+        <DevotionsPage
+          onClose={() => setDevotionsOpen(false)}
+          onOpenMulk={() => {
+            setDevotionsOpen(false);
+            setQuranRequest({ surah: 67, token: Date.now() });
+            setPage('quran');
+            window.scrollTo(0, 0);
+          }}
+        />
+      )}
     </div>
   );
 }

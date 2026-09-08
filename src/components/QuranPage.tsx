@@ -11,13 +11,25 @@ import { playAyah, stopAyah } from '../lib/recite';
 import { useStore } from '../lib/store';
 import { useI18n } from '../lib/i18n';
 
-export function QuranPage({ onReading }: { onReading?: (reading: boolean) => void }) {
+export function QuranPage({
+  onReading,
+  openRequest,
+}: {
+  onReading?: (reading: boolean) => void;
+  openRequest?: { surah: number; token: number } | null;
+}) {
   const { text } = useI18n();
   const [data, setData] = useState<QuranBundle | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   const [open, setOpen] = useState<{ surah: number; ayah: number } | null>(null);
   const [leaving, setLeaving] = useState(false);
+
+  useEffect(() => {
+    if (!openRequest) return;
+    setLeaving(false);
+    setOpen({ surah: openRequest.surah, ayah: 1 });
+  }, [openRequest?.token, openRequest?.surah]);
 
   useEffect(() => {
     let alive = true;

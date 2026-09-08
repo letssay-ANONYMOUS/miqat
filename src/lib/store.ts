@@ -5,6 +5,11 @@ import { methodForPlace } from './methods';
 import type { Place } from './geo';
 import type { QuranBookmark, ReciterId } from './quran';
 
+export type DhikrKind = 'istighfar' | 'tasbih' | 'tahmid' | 'takbir';
+export type DhikrCounts = Record<DhikrKind, number>;
+
+const EMPTY_DHIKR: DhikrCounts = { istighfar: 0, tasbih: 0, tahmid: 0, takbir: 0 };
+
 interface State {
   place: Place | null;
   settings: Settings;
@@ -28,6 +33,12 @@ interface State {
   pinMethod: (pinned: boolean) => void;
   setIqamaOffset: (key: PrayerKey, minutes: number | null) => void;
   resetOffsets: () => void;
+  /** Daily, on-device totals. No account or network is involved. */
+  dhikrHistory: Record<string, DhikrCounts>;
+  recordDhikr: (day: string, kind: DhikrKind, amount: number) => void;
+  /** Checked morning/evening rituals, grouped by local calendar day. */
+  ritualChecks: Record<string, string[]>;
+  toggleRitual: (day: string, ritualId: string) => void;
   quranBookmark: QuranBookmark | null;
   setQuranBookmark: (mark: QuranBookmark) => void;
   quranShowEnglish: boolean;
@@ -83,6 +94,33 @@ export const useStore = create<State>()(
             ...get().settings,
             offsets: { fajr: 0, sunrise: 0, dhuhr: 0, asr: 0, maghrib: 0, isha: 0 },
           },
+        }),
+      dhikrHistory: {},
+      recordDhikr: (day, kind, amount) => {
+        if (!Number.isFinite(amount) || amount <= 0) return;
+        set((state) => {
+          const existing = state.dhikrHistory[day] ?? EMPTY_DHIKR;
+          return {
+            dhikrHistory: {
+              ...state.dhikrHistory,
+              [day]: { ...existing, [kind]: existing[kind] + Math.floor(amount) },
+            },
+          };
+        });
+      },
+      ritualChecks: {},
+      toggleRitual: (day, ritualId) =>
+        set((state) => {
+          const current = state.ritualChecks[day] ?? [];
+          const checked = current.includes(ritualId);
+          return {
+            ritualChecks: {
+              ...state.ritualChecks,
+              [day]: checked
+                ? current.filter((id) => id !== ritualId)
+                : [...current, ritualId],
+            },
+          };
         }),
       quranBookmark: null,
       setQuranBookmark: (quranBookmark) => set({ quranBookmark }),
