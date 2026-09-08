@@ -19,6 +19,13 @@ export function PrivacySheet({ open, onClose }: { open: boolean; onClose: () => 
           {text('Prayer times are worked out on your own device. Your location is needed for that, and for that purpose it never leaves your phone.', 'تُحسب مواقيت الصلاة على جهازك. يحتاج الحساب إلى موقعك، ولهذا الغرض لا يغادر موقعك هاتفك.')}
         </p>
 
+        <p>
+          {text(
+            'A first-party cookie remembers your language, display choices and a city selected by search. Exact GPS coordinates stay only in local storage and are never put in that cookie.',
+            'تتذكر ملفات تعريف الارتباط التابعة للموقع لغتك وخيارات العرض والمدينة التي اخترتها بالبحث. تبقى إحداثيات GPS الدقيقة في التخزين المحلي فقط ولا توضع أبدًا في ملف تعريف الارتباط.',
+          )}
+        </p>
+
         <Section title={text('What is recorded every visit', 'ما يُسجَّل في كل زيارة')}>
           <p>
             {text('A random identifier created in your browser, how many times you have opened the app, the town and country the app resolved, your time zone, device type, browser language, and which calculation method you use. The identifier is not linked to your name, email, phone number or account, because the app has none of those.', 'معرّف عشوائي يُنشأ في متصفحك، وعدد مرات فتح التطبيق، والمدينة والدولة اللتان حددهما، ومنطقتك الزمنية، ونوع الجهاز، ولغة المتصفح، وطريقة الحساب المستخدمة. لا يرتبط المعرّف باسمك أو بريدك الإلكتروني أو رقم هاتفك أو حساب، لأن التطبيق لا يجمع أيًا منها.')}

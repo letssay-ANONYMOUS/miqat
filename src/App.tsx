@@ -41,6 +41,7 @@ import { isNowPlaying, startNowPlaying, stopNowPlaying, update as updateNowPlayi
 import { useI18n } from './lib/i18n';
 import { localizedUaeName } from './lib/uaePlaces';
 import { DevotionsPage } from './components/DevotionsPage';
+import { writePreferenceCookie } from './lib/preferenceCookie';
 
 type SheetName = 'location' | 'verify';
 
@@ -70,6 +71,10 @@ export default function App() {
     document.documentElement.dir = isArabic ? 'rtl' : 'ltr';
     if (!place) document.title = text('Miqāt — Prayer Times', 'ميقات — مواقيت الصلاة');
   }, [language, isArabic, place, text]);
+
+  useEffect(() => {
+    writePreferenceCookie(place, settings, viewMode);
+  }, [place, settings, viewMode]);
 
   const timezone = place?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
   const civil = civilDateIn(timezone, now);

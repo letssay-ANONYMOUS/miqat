@@ -187,10 +187,11 @@ export function DevotionsPage({
 
 function DhikrCounter() {
   const { language, isArabic, locale, text } = useI18n();
-  const { dhikrHistory, recordDhikr } = useStore();
+  const { dhikrHistory, recordDhikr, resetDhikr } = useStore();
   const [kind, setKind] = useState<DhikrKind>('istighfar');
   const [session, setSession] = useState(0);
   const [focusLocked, setFocusLocked] = useState(false);
+  const [resetOpen, setResetOpen] = useState(false);
   const [unlocking, setUnlocking] = useState(false);
   const pending = useRef(0);
   const flushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -241,7 +242,7 @@ function DhikrCounter() {
     const next = session + 1;
     pending.current += 1;
     setSession(next);
-    haptic(next % 33 === 0 ? 'lock' : 'tick');
+    haptic(next % 33 === 0 ? 'lock' : 'soft');
     if (flushTimer.current) clearTimeout(flushTimer.current);
     flushTimer.current = setTimeout(flush, 450);
   };
@@ -253,10 +254,12 @@ function DhikrCounter() {
     haptic('soft');
   };
 
-  const newSession = () => {
+  const confirmReset = () => {
     flush();
+    resetDhikr(today, kind);
     setSession(0);
-    haptic('soft');
+    setResetOpen(false);
+    haptic('lock');
   };
 
   const startUnlock = () => {
@@ -352,13 +355,31 @@ function DhikrCounter() {
           <LockIcon open={false} />
           {text('Focus lock', 'وضع التركيز')}
         </button>
-        <button type="button" onClick={newSession} className="devotion-control">
+        <button type="button" onClick={() => { flush(); setResetOpen(true); haptic('soft'); }} className="devotion-control">
           <svg width="17" height="17" viewBox="0 0 20 20" fill="none" aria-hidden="true">
             <path d="M16 6V2m0 0h-4m4 0l-3 3a6 6 0 10.8 8.4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
-          {text('New session', 'جلسة جديدة')}
+          {text('Reset', 'إعادة الضبط')}
         </button>
       </div>
+      {resetOpen && (
+        <div className="reset-confirm mx-auto mt-4 max-w-sm text-center">
+          <p className="text-sm font-medium">
+            {text(`Reset today's ${phrase.shortEn} count?`, `إعادة ضبط عدد ${phrase.shortAr} لليوم؟`)}
+          </p>
+          <p className="mt-1 text-xs text-[var(--ink-faint)]">
+            {text('Earlier days remain in history.', 'تبقى الأيام السابقة محفوظة في السجل.')}
+          </p>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <button type="button" onClick={() => setResetOpen(false)} className="reset-choice">
+              {text('Cancel', 'إلغاء')}
+            </button>
+            <button type="button" onClick={confirmReset} className="reset-choice is-danger">
+              {text('Reset today', 'إعادة ضبط اليوم')}
+            </button>
+          </div>
+        </div>
+      )}
       <p className="mx-auto mt-3 max-w-sm text-center text-[11px] leading-relaxed text-[var(--ink-faint)]">
         {text('Focus lock keeps only the counter active and asks for a long press to leave.', 'وضع التركيز يُبقي العداد وحده نشطًا ويتطلب ضغطة مطولة للخروج.')}
       </p>

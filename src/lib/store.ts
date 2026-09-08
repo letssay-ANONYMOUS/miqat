@@ -4,6 +4,7 @@ import { DEFAULT_SETTINGS, type PrayerKey, type Settings } from './prayer';
 import { methodForPlace } from './methods';
 import type { Place } from './geo';
 import type { QuranBookmark, ReciterId } from './quran';
+import { readPreferenceCookie } from './preferenceCookie';
 
 export type DhikrKind = 'istighfar' | 'tasbih' | 'tahmid' | 'takbir';
 export type DhikrCounts = Record<DhikrKind, number>;
@@ -36,6 +37,7 @@ interface State {
   /** Daily, on-device totals. No account or network is involved. */
   dhikrHistory: Record<string, DhikrCounts>;
   recordDhikr: (day: string, kind: DhikrKind, amount: number) => void;
+  resetDhikr: (day: string, kind: DhikrKind) => void;
   /** Checked morning/evening rituals, grouped by local calendar day. */
   ritualChecks: Record<string, string[]>;
   toggleRitual: (day: string, ritualId: string) => void;
@@ -108,6 +110,17 @@ export const useStore = create<State>()(
           };
         });
       },
+      resetDhikr: (day, kind) =>
+        set((state) => {
+          const existing = state.dhikrHistory[day];
+          if (!existing) return state;
+          return {
+            dhikrHistory: {
+              ...state.dhikrHistory,
+              [day]: { ...existing, [kind]: 0 },
+            },
+          };
+        }),
       ritualChecks: {},
       toggleRitual: (day, ritualId) =>
         set((state) => {
@@ -134,7 +147,12 @@ export const useStore = create<State>()(
       version: 1,
       merge: (persisted, current) => {
         const saved = persisted as Partial<State> | undefined;
-        const settings = { ...DEFAULT_SETTINGS, ...(saved?.settings ?? {}) };
+        const cookie = saved ? undefined : readPreferenceCookie();
+        const settings = {
+          ...DEFAULT_SETTINGS,
+          ...(cookie?.settings ?? {}),
+          ...(saved?.settings ?? {}),
+        };
         // Re-derive the convention on every load unless the user chose one, so a
         // stored location can never end up paired with a stale global default.
         if (!saved?.methodPinned && saved?.place) {
@@ -144,7 +162,7 @@ export const useStore = create<State>()(
             saved.place.longitude,
           );
         }
-        return { ...current, ...saved, settings };
+        return { ...current, ...(cookie ?? {}), ...saved, settings };
       },
     },
   ),

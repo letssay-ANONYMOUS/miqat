@@ -102,13 +102,19 @@ export function useRubberBand(
 /**
  * A tap you can feel.
  *
- * `navigator.vibrate` is the only haptic route the web offers, and iOS Safari
- * does not implement it — there is no way to buzz an iPhone from a web page.
- * So this is real on Android and silently does nothing on iOS rather than
- * pretending otherwise.
+ * Android exposes the Vibration API. WebKit does not expose Core Haptics, but
+ * supported iPhone versions give their native switch control a small system
+ * pulse, so that is used as a best-effort fallback during a real user tap.
  */
+const switchHapticAvailable =
+  isIOS &&
+  typeof CSS !== 'undefined' &&
+  typeof CSS.supports === 'function' &&
+  CSS.supports('(-webkit-appearance: switch)');
+
 export const hapticsAvailable =
-  typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function';
+  (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') ||
+  switchHapticAvailable;
 
 export type Haptic = 'tick' | 'lock' | 'soft';
 
@@ -118,11 +124,37 @@ const PATTERNS: Record<Haptic, number | number[]> = {
   lock: [14, 40, 22],
 };
 
+let nativeSwitch: HTMLInputElement | null = null;
+
+function pulseNativeSwitch(): void {
+  if (!switchHapticAvailable || typeof document === 'undefined') return;
+  if (!nativeSwitch) {
+    nativeSwitch = document.createElement('input');
+    nativeSwitch.type = 'checkbox';
+    nativeSwitch.setAttribute('switch', '');
+    nativeSwitch.setAttribute('aria-hidden', 'true');
+    nativeSwitch.tabIndex = -1;
+    Object.assign(nativeSwitch.style, {
+      position: 'fixed',
+      left: '0',
+      top: '0',
+      width: '1px',
+      height: '1px',
+      opacity: '0.001',
+      pointerEvents: 'none',
+      zIndex: '-1',
+    });
+    document.body.appendChild(nativeSwitch);
+  }
+  nativeSwitch.click();
+}
+
 export function haptic(kind: Haptic): void {
   if (!hapticsAvailable) return;
   try {
-    navigator.vibrate(PATTERNS[kind]);
+    if (typeof navigator.vibrate === 'function' && navigator.vibrate(PATTERNS[kind])) return;
+    pulseNativeSwitch();
   } catch {
-    // A refused vibration is never worth surfacing.
+    // A refused pulse is never worth surfacing.
   }
 }

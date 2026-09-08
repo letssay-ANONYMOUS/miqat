@@ -902,9 +902,9 @@ body.reading-mushaf.show-app-chrome .tabbar-dock {
   -webkit-user-select: none;
   will-change: transform;
   transition:
-    transform 0.46s cubic-bezier(0.16, 1, 0.3, 1),
-    box-shadow 0.46s cubic-bezier(0.16, 1, 0.3, 1),
-    filter 0.3s ease;
+    transform 0.72s cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 0.72s cubic-bezier(0.16, 1, 0.3, 1),
+    filter 0.46s ease;
 }
 
 .counter-button-rim {
@@ -923,7 +923,30 @@ body.reading-mushaf.show-app-chrome .tabbar-dock {
     0 5px 9px rgb(4 15 30 / 0.16);
   transform: translateY(5px) scale(0.985) translateZ(0);
   filter: saturate(0.92) brightness(0.96);
-  transition-duration: 120ms;
+  transition-duration: 280ms;
+}
+
+.reset-confirm {
+  padding: 1rem;
+  border: 1px solid var(--card-line);
+  border-radius: 1.25rem;
+  background: color-mix(in srgb, var(--card) 84%, transparent);
+  box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.1);
+}
+
+.reset-choice {
+  min-height: 2.5rem;
+  border: 1px solid var(--card-line);
+  border-radius: 0.85rem;
+  color: var(--ink-dim);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.reset-choice.is-danger {
+  color: var(--ink);
+  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  border-color: var(--accent-soft);
 }
 
 .devotion-control {
