@@ -8,6 +8,7 @@ import {
 } from 'react';
 import { haptic } from '../lib/feel';
 import { useI18n } from '../lib/i18n';
+import { useBarGesture } from '../lib/useBarGesture';
 
 export type Page = 'times' | 'qibla' | 'quran' | 'month' | 'settings';
 
@@ -172,12 +173,14 @@ export function TabBar({ page, onChange }: { page: Page; onChange: (page: Page) 
   };
 
   const width = collapsed ? shutW || undefined : openW || undefined;
+  const gestures = useBarGesture(bar, (node) => select(node.dataset.tab as Page), collapsed);
 
   return (
     <nav className="tabbar-dock" dir="ltr">
       <div ref={rail} className="tabbar-rail">
         <div
           ref={bar}
+          {...gestures}
           className={`tabbar${collapsed ? ' is-collapsed' : ''}`}
           role="tablist"
           aria-label={text('Pages', 'الصفحات')}

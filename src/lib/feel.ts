@@ -9,7 +9,7 @@ import { useEffect, type RefObject } from 'react';
  * desktop. Fighting Safari for it would make the good case worse.
  */
 
-const isIOS =
+export const isIOS =
   typeof navigator !== 'undefined' &&
   (/iPad|iPhone|iPod/.test(navigator.userAgent) ||
     (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1));

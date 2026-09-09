@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Segmented } from './Segmented';
-import { haptic } from '../lib/feel';
+import { haptic, isIOS } from '../lib/feel';
 import { useI18n } from '../lib/i18n';
 import { useStore, type DhikrCounts, type DhikrKind } from '../lib/store';
 
@@ -242,7 +242,7 @@ function DhikrCounter() {
     const next = session + 1;
     pending.current += 1;
     setSession(next);
-    haptic(next % 33 === 0 ? 'lock' : 'soft');
+    if (!isIOS) haptic('tick');
     if (flushTimer.current) clearTimeout(flushTimer.current);
     flushTimer.current = setTimeout(flush, 450);
   };
@@ -412,6 +412,21 @@ function DhikrCounter() {
 
 function CounterButton({ phrase, onPress, locked = false }: { phrase: string; onPress: () => void; locked?: boolean }) {
   const { text } = useI18n();
+  const nativeSwitch = useRef<HTMLInputElement>(null);
+  useEffect(() => { nativeSwitch.current?.setAttribute('switch', ''); }, []);
+  const content = <>
+    <span className="counter-button-rim" aria-hidden="true" />
+    <span className="relative z-10 block text-[11px] uppercase tracking-[0.18em] opacity-60">{text('Tap to count', 'اضغط للعد')}</span>
+    <span className="relative z-10 mt-2 block text-xl font-semibold">{phrase}</span>
+    <span dir="ltr" className="relative z-10 mt-3 block text-sm font-medium opacity-55">+1</span>
+  </>;
+  if (isIOS) return <div className={`counter-plinth mx-auto mt-7${locked ? ' is-locked' : ''}`}>
+    <label className="counter-button native-counter">
+      {content}
+      <input ref={nativeSwitch} type="checkbox" className="counter-native-switch" onChange={onPress}
+        aria-label={text(`Count ${phrase}`, `عدّ ${phrase}`)} />
+    </label>
+  </div>;
   return (
     <div className={`counter-plinth mx-auto mt-7${locked ? ' is-locked' : ''}`}>
       <button type="button" className="counter-button" onClick={onPress} aria-label={text(`Count ${phrase}`, `عدّ ${phrase}`)}>

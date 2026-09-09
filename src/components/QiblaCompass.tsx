@@ -1,4 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import geomagnetism from 'geomagnetism';
+import { currentPosition } from '../lib/geo';
+import { qiblaDegrees } from '../lib/prayer';
 import { lerpAngle, readingFrom, relativeTurn, solarCalibration, type Reading } from '../lib/heading';
 import { sunPosition } from '../lib/sun';
 import { useStore } from '../lib/store';
@@ -27,11 +30,22 @@ const CARDINALS = [
  * reading is unsteady, and the sun line, which needs no compass at all, is
  * always offered alongside it.
  */
-export function QiblaCompass({ bearing }: { bearing: number }) {
+export function QiblaCompass({ bearing: savedBearing }: { bearing: number }) {
+  const [fix, setFix] = useState<{ latitude: number; longitude: number; accuracy: number } | null>(null);
+  const [locationMessage, setLocationMessage] = useState('');
+  const [locating, setLocating] = useState(false);
   const place = useStore((state) => state.place);
   const qiblaOffset = useStore((state) => state.qiblaOffset);
   const setQiblaOffset = useStore((state) => state.setQiblaOffset);
   const { isArabic, text } = useI18n();
+  const bearing = fix ? qiblaDegrees(fix.latitude, fix.longitude) : savedBearing;
+  const latitude = fix?.latitude ?? place?.latitude;
+  const longitude = fix?.longitude ?? place?.longitude;
+  const declination = useMemo(() => {
+    if (latitude == null || longitude == null) return null;
+    try { return geomagnetism.model(new Date()).point([latitude, longitude, 0]).decl; }
+    catch { return null; }
+  }, [latitude, longitude]);
 
   const [reading, setReading] = useState<Reading | null>(null);
   const [status, setStatus] = useState<Status>('idle');
@@ -39,6 +53,7 @@ export function QiblaCompass({ bearing }: { bearing: number }) {
   const [aligned, setAligned] = useState(false);
   const listening = useRef(false);
   const raw = useRef<Reading | null>(null);
+  const receivedAt = useRef(0);
   const shown = useRef(0);
   const rose = useRef<SVGGElement>(null);
   const needle = useRef<SVGGElement>(null);
@@ -62,7 +77,10 @@ export function QiblaCompass({ bearing }: { bearing: number }) {
     listening.current = true;
     const onOrientation = (event: Event) => {
       const next = readingFrom(event as DeviceOrientationEvent);
-      if (next) raw.current = next;
+      if (next && (next.reference !== 'unusable' || raw.current?.reference === 'unusable' || !raw.current)) {
+        raw.current = next;
+        receivedAt.current = performance.now();
+      }
     };
     // iOS puts webkitCompassHeading on deviceorientation; absolute is extra on Android.
     window.addEventListener('deviceorientation', onOrientation, true);
@@ -82,11 +100,15 @@ export function QiblaCompass({ bearing }: { bearing: number }) {
     const tick = (time: number) => {
       raf = requestAnimationFrame(tick);
       const sample = raw.current;
-      if (!sample || sample.reference === 'unusable') return;
+      if (!sample || time - receivedAt.current > 2000 || sample.reference === 'unusable' || sample.level < 0.45 || (sample.accuracy !== null && (sample.accuracy < 0 || sample.accuracy > 20))) {
+        setAligned(false);
+        if (sample) setReading(sample);
+        return;
+      }
 
       const dt = lastFrame.current ? Math.min(0.05, (time - lastFrame.current) / 1000) : 0.016;
       lastFrame.current = time;
-      const corrected = (sample.degrees + qiblaOffset + 360) % 360;
+      const corrected = (sample.degrees + (qiblaOffset || (sample.reference === 'magnetic' ? declination ?? 0 : 0)) + 360) % 360;
       if (!primed.current) {
         shown.current = corrected;
         primed.current = true;
@@ -134,9 +156,17 @@ export function QiblaCompass({ bearing }: { bearing: number }) {
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [status, bearing, qiblaOffset, ios]);
+  }, [status, bearing, qiblaOffset, ios, declination]);
 
   const enable = async () => {
+    setLocating(true);
+    setLocationMessage('');
+    const gps = currentPosition().then(({ coords }) => {
+      setFix({ latitude: coords.latitude, longitude: coords.longitude, accuracy: coords.accuracy });
+      setQiblaOffset(0);
+      setLocationMessage(text(`GPS accuracy: ±${Math.round(coords.accuracy)} m`, `دقة الموقع: ±${Math.round(coords.accuracy)} م`));
+    }).catch(() => setLocationMessage(text('Location unavailable. Using your saved city; allow Location in Safari settings and retry.', 'تعذر تحديد الموقع. نستخدم المدينة المحفوظة؛ اسمح بالموقع في إعدادات Safari ثم أعد المحاولة.'))).finally(() => setLocating(false));
+    void gps;
     if (typeof DeviceOrientationEvent === 'undefined') return setStatus('unsupported');
     const ctor = DeviceOrientationEvent as PermissionCapableCtor;
     try {
@@ -144,6 +174,8 @@ export function QiblaCompass({ bearing }: { bearing: number }) {
         if ((await ctor.requestPermission()) !== 'granted') return setStatus('denied');
       }
       primed.current = false;
+      raw.current = null;
+      setReading(null);
       lastFrame.current = 0;
       setStatus('live');
     } catch {
@@ -151,19 +183,23 @@ export function QiblaCompass({ bearing }: { bearing: number }) {
     }
   };
 
-  const sun = place ? sunPosition(now, place.latitude, place.longitude) : null;
+  const sun = latitude != null && longitude != null ? sunPosition(now, latitude, longitude) : null;
   const sunUp = sun !== null && sun.altitude > 1;
   const fromSun = sun ? relativeTurn(sun.azimuth, bearing) : null;
 
   const live = reading !== null && reading.reference !== 'unusable';
-  const shaky = reading !== null && (reading.level < 0.45 || (reading.accuracy ?? 0) < 0);
+  const shaky = reading !== null && (reading.level < 0.45 || (reading.accuracy ?? 0) < 0 || (reading.accuracy ?? 0) > 20);
 
   const calibrate = () => {
-    if (reading && sun) setQiblaOffset(solarCalibration(sun.azimuth, reading.degrees));
+    if (raw.current && sun && !shaky) setQiblaOffset(solarCalibration(sun.azimuth, raw.current.degrees));
   };
 
   return (
     <div className="flex flex-col items-center">
+      <button type="button" disabled={locating} onClick={() => void enable()} className="mb-3 rounded-full border border-[var(--card-line)] px-4 py-2 text-sm">
+        {locating ? text('Finding your location…', 'جارٍ تحديد موقعك…') : text('Use current location & compass', 'استخدام الموقع الحالي والبوصلة')}
+      </button>
+      {locationMessage && <p className="mb-3 max-w-sm text-center text-xs text-[var(--ink-dim)]">{locationMessage}</p>}
       <div className={`qibla-stage${aligned ? ' is-aligned' : ''}`}>
         <svg viewBox="0 0 400 400" className="qibla-face" aria-label={text(`Qibla ${bearing.toFixed(1)} degrees from true north`, `اتجاه القبلة ${bearing.toFixed(1)} درجة من الشمال الحقيقي`)}>
           <defs>
@@ -314,7 +350,9 @@ export function QiblaCompass({ bearing }: { bearing: number }) {
 
         {live && !shaky && (
           <p className="text-sm text-[var(--ink-dim)]">
-            {reading?.reference === 'true'
+            {declination !== null && qiblaOffset === 0
+              ? text('Heading corrected to true north for your location.', 'تم تصحيح الاتجاه إلى الشمال الحقيقي بحسب موقعك.')
+              : reading?.reference === 'true'
               ? text('Live, referenced to true north.', 'قراءة مباشرة نسبةً إلى الشمال الحقيقي.')
               : qiblaOffset !== 0
                 ? text('Live, corrected against the sun.', 'قراءة مباشرة مصححة باستخدام الشمس.')

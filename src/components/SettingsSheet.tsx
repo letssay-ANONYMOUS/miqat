@@ -57,7 +57,7 @@ export function SettingsContent() {
   const offsetsUsed = PRAYER_ORDER.some((k) => settings.offsets[k] !== 0);
 
   return (
-    <>
+    <div className="settings-content">
       <div className="mb-5">
         <span className="text-[13px] font-medium text-[var(--ink-dim)]">
           {text('Language', 'اللغة')}
@@ -85,6 +85,7 @@ export function SettingsContent() {
         />
       </div>
 
+      <h2 className="settings-section-heading">{isArabic ? TABS.find((item) => item.id === tab)?.labelAr : TABS.find((item) => item.id === tab)?.label}</h2>
       {tab === 'display' && (
         <div className="space-y-6">
           <div>
@@ -451,7 +452,7 @@ export function SettingsContent() {
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 }
 

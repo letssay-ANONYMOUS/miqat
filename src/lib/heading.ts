@@ -17,9 +17,8 @@
  *  - magnetic north, where the magnetometer points, differing by the local
  *    declination — about 2° in the UAE, over 15° in parts of North America.
  *
- * iOS gives a true-north heading directly. Elsewhere we get magnetic and have
- * no declination model offline, so the app says so and offers the sun as an
- * exact correction (see `solarCalibration`).
+ * iOS supplies magnetic north. The Qibla component corrects it with WMM2025
+ * for the current location, or uses the user's solar calibration.
  */
 
 const DEG = Math.PI / 180;
@@ -76,15 +75,14 @@ export function screenAngle(): number {
 export function readingFrom(event: DeviceOrientationEvent): Reading | null {
   const ios = event as OrientationEventIOS;
 
-  // iOS compensates for tilt and screen rotation itself, and references true
-  // north whenever Location Services is on for the browser.
+  // Apple's heading references magnetic north, not true north.
   if (typeof ios.webkitCompassHeading === 'number' && Number.isFinite(ios.webkitCompassHeading)) {
     const accuracy =
       typeof ios.webkitCompassAccuracy === 'number' ? ios.webkitCompassAccuracy : null;
     return {
-      degrees: ios.webkitCompassHeading,
-      reference: 'true',
-      level: 1,
+      degrees: (ios.webkitCompassHeading + screenAngle() + 360) % 360,
+      reference: ios.webkitCompassHeading < 0 ? 'unusable' : 'magnetic',
+      level: event.beta == null ? 0 : Math.abs(Math.cos(event.beta * DEG)),
       accuracy,
     };
   }
