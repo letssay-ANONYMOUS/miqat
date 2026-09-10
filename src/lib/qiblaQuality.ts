@@ -1,7 +1,19 @@
 import type { Reading } from './heading';
 
 export interface QiblaFix { latitude: number; longitude: number; accuracy: number; timestamp: number }
-export type QiblaIssue = 'location' | 'location-stale' | 'location-poor' | 'near-kaaba' | 'portrait' | 'waiting' | 'stale' | 'relative' | 'flat' | 'sensor-poor' | 'model';
+export type QiblaIssue =
+  | 'location'
+  | 'location-stale'
+  | 'location-poor'
+  | 'near-kaaba'
+  | 'portrait'
+  | 'waiting'
+  | 'stale'
+  | 'relative'
+  | 'flat'
+  | 'sensor-unverified'
+  | 'sensor-poor'
+  | 'model';
 
 export function distanceMeters(
   latitude: number,
@@ -20,7 +32,15 @@ export function kaabaDistance(latitude: number, longitude: number): number {
   return distanceMeters(latitude, longitude, 21.4225241, 39.8261818);
 }
 
-export function qiblaIssue(fix: QiblaFix | null, sample: Reading | null, age: number, angle: number, correction: number | null, now = Date.now()): QiblaIssue | null {
+export function qiblaIssue(
+  fix: QiblaFix | null,
+  sample: Reading | null,
+  age: number,
+  angle: number,
+  correction: number | null,
+  calibrated = false,
+  now = Date.now(),
+): QiblaIssue | null {
   if (!fix) return 'location';
   if (![fix.latitude, fix.longitude, fix.accuracy, fix.timestamp].every(Number.isFinite) || Math.abs(fix.latitude) > 90 || Math.abs(fix.longitude) > 180 || fix.accuracy < 0) return 'location-poor';
   // A stationary watch may not emit every minute. Five minutes remains tight
@@ -34,6 +54,7 @@ export function qiblaIssue(fix: QiblaFix | null, sample: Reading | null, age: nu
   if (age > 1500) return 'stale';
   if (sample.reference === 'unusable' || !Number.isFinite(sample.degrees)) return 'relative';
   if (sample.level < Math.cos(25 * Math.PI / 180)) return 'flat';
+  if (sample.accuracy === null && !calibrated) return 'sensor-unverified';
   if (sample.accuracy !== null && (!Number.isFinite(sample.accuracy) || sample.accuracy < 0 || sample.accuracy > 10)) return 'sensor-poor';
   if (correction === null || !Number.isFinite(correction)) return 'model';
   return null;

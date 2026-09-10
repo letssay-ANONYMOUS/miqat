@@ -112,7 +112,14 @@ export function QiblaCompass({ bearing: savedBearing }: { bearing: number }) {
       raf = requestAnimationFrame(tick);
       const sample = raw.current;
       const correction = qiblaOffset ?? (sample?.reference === 'true' ? 0 : declination);
-      const problem = qiblaIssue(fix, sample, time - receivedAt.current, screenAngle(), correction);
+      const problem = qiblaIssue(
+        fix,
+        sample,
+        time - receivedAt.current,
+        screenAngle(),
+        correction,
+        qiblaOffset !== null,
+      );
       if (issueRef.current !== problem) {
         issueRef.current = problem;
         setIssue(problem);
@@ -242,9 +249,23 @@ export function QiblaCompass({ bearing: savedBearing }: { bearing: number }) {
 
   const live = issue === null && status === 'live' && reading !== null;
   const shaky = reading !== null && (reading.level < 0.45 || (reading.accuracy ?? 0) < 0 || (reading.accuracy ?? 0) > 20);
+  const canSolarCalibrate = Boolean(
+    status === 'live' &&
+      fix &&
+      raw.current &&
+      sunUp &&
+      qiblaIssue(
+        fix,
+        raw.current,
+        performance.now() - receivedAt.current,
+        screenAngle(),
+        0,
+        true,
+      ) === null,
+  );
 
   const calibrate = () => {
-    if (raw.current && sun && live && !shaky && fix) {
+    if (raw.current && sun && canSolarCalibrate && !shaky && fix) {
       calibrationAt.current = { latitude: fix.latitude, longitude: fix.longitude };
       setQiblaOffset(solarCalibration(sun.azimuth, raw.current.degrees));
     }
@@ -259,8 +280,8 @@ export function QiblaCompass({ bearing: savedBearing }: { bearing: number }) {
       {status !== 'denied' && status !== 'unsupported' && (
       <p className="mb-3 max-w-sm text-center text-sm" role="status">
         {issue ? text(
-          ({ location: 'Enable precise location to use the live arrow.', 'location-stale': 'Location is stale. Refresh your location.', 'location-poor': 'Location is too imprecise. Move outdoors and retry.', 'near-kaaba': 'Too close to the Kaaba for a reliable phone bearing. Use the visible Kaaba or mosque alignment.', portrait: 'Hold the phone in portrait orientation.', waiting: 'Waiting for a compass reading.', stale: 'Compass data stopped. The arrow is hidden.', relative: 'This browser is not providing a compass heading.', flat: 'Hold the screen face up and nearly flat.', 'sensor-poor': 'Compass accuracy is poor. Remove magnetic accessories and recalibrate.', model: 'Magnetic correction unavailable. Live arrow disabled.' } as const)[issue],
-          ({ location: 'فعّل الموقع الدقيق لاستخدام السهم المباشر.', 'location-stale': 'الموقع قديم. حدّث موقعك.', 'location-poor': 'الموقع غير دقيق. انتقل إلى مكان مفتوح وأعد المحاولة.', 'near-kaaba': 'أنت قريب جدًا من الكعبة لاتجاه موثوق بالهاتف. اعتمد الكعبة المرئية أو اتجاه المسجد.', portrait: 'استخدم وضع الشاشة العمودي.', waiting: 'بانتظار قراءة البوصلة.', stale: 'توقفت بيانات البوصلة. تم إخفاء السهم.', relative: 'المتصفح لا يوفر اتجاه بوصلة.', flat: 'اجعل الشاشة لأعلى والهاتف شبه أفقي.', 'sensor-poor': 'دقة البوصلة ضعيفة. أزل الملحقات المغناطيسية وأعد المعايرة.', model: 'تصحيح الشمال غير متاح. السهم متوقف.' } as const)[issue])
+          ({ location: 'Enable precise location to use the live arrow.', 'location-stale': 'Location is stale. Refresh your location.', 'location-poor': 'Location is too imprecise. Move outdoors and retry.', 'near-kaaba': 'Too close to the Kaaba for a reliable phone bearing. Use the visible Kaaba or mosque alignment.', portrait: 'Hold the phone in portrait orientation.', waiting: 'Waiting for a compass reading.', stale: 'Compass data stopped. The arrow is hidden.', relative: 'This browser is not providing a compass heading.', flat: 'Hold the screen face up and nearly flat.', 'sensor-unverified': 'This browser does not report compass accuracy. Calibrate with the sun and a shadow to enable the arrow.', 'sensor-poor': 'Compass accuracy is poor. Remove magnetic accessories and recalibrate.', model: 'Magnetic correction unavailable. Calibrate with the sun and a shadow to enable the arrow.' } as const)[issue],
+          ({ location: 'فعّل الموقع الدقيق لاستخدام السهم المباشر.', 'location-stale': 'الموقع قديم. حدّث موقعك.', 'location-poor': 'الموقع غير دقيق. انتقل إلى مكان مفتوح وأعد المحاولة.', 'near-kaaba': 'أنت قريب جدًا من الكعبة لاتجاه موثوق بالهاتف. اعتمد الكعبة المرئية أو اتجاه المسجد.', portrait: 'استخدم وضع الشاشة العمودي.', waiting: 'بانتظار قراءة البوصلة.', stale: 'توقفت بيانات البوصلة. تم إخفاء السهم.', relative: 'المتصفح لا يوفر اتجاه بوصلة.', flat: 'اجعل الشاشة لأعلى والهاتف شبه أفقي.', 'sensor-unverified': 'المتصفح لا يبلّغ عن دقة البوصلة. عاير باستخدام الشمس والظل لتفعيل السهم.', 'sensor-poor': 'دقة البوصلة ضعيفة. أزل الملحقات المغناطيسية وأعد المعايرة.', model: 'تصحيح الشمال غير متاح. عاير باستخدام الشمس والظل لتفعيل السهم.' } as const)[issue])
           : text('Estimated phone direction — confirm against a trusted mosque alignment.', 'اتجاه تقديري للهاتف — قارنه باتجاه مسجد موثوق.')}
       </p>
       )}
@@ -391,7 +412,7 @@ export function QiblaCompass({ bearing: savedBearing }: { bearing: number }) {
           </p>
         )}
 
-        {live && sunUp && (
+        {canSolarCalibrate && (
           <button
             onClick={calibrate}
             className="w-full rounded-2xl border border-[var(--card-line)] px-5 py-3 text-sm font-medium transition active:bg-white/10"
