@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { placeInSky, sunPosition } from '../lib/sun';
 import { skyFor } from '../lib/sky';
-import { MoonBody, SunBody } from './Celestial';
+import { MoonBody, SunBody, SunOptics } from './Celestial';
 
 /**
  * The background: the real sun, in the real place it is right now.
@@ -74,12 +74,13 @@ export function Sky({
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
-  const { paint, place, horizonHeat } = useMemo(() => {
+  const { paint, place, horizonHeat, rayStrength } = useMemo(() => {
     const position = sunPosition(now, latitude, longitude);
     return {
       paint: skyFor(position.altitude),
       place: placeInSky(position),
       horizonHeat: Math.max(0, 1 - Math.abs(position.altitude) / 10),
+      rayStrength: Math.max(0.12, Math.min(1, (position.altitude + 2) / 32)),
     };
   }, [now, latitude, longitude]);
 
@@ -95,10 +96,11 @@ export function Sky({
     root.style.setProperty('--star-opacity', String(paint.starOpacity));
     root.style.setProperty('--sun-opacity', String(paint.sunOpacity));
     root.style.setProperty('--horizon-heat', String(horizonHeat));
+    root.style.setProperty('--solar-rays', String(rayStrength));
     root.dataset.ui = paint.lightUi ? 'light' : 'dark';
     const frame = requestAnimationFrame(() => setTracking(true));
     return () => cancelAnimationFrame(frame);
-  }, [paint, place, horizonHeat]);
+  }, [paint, place, horizonHeat, rayStrength]);
 
   const stars = useMemo(() => {
     let seed = 20260829;
@@ -144,6 +146,7 @@ export function Sky({
       <div className={`sun-stage${tracking ? ' is-tracking' : ''}`}>
         <div className="sun-atmosphere" />
         <div className="sun-corona" />
+        <SunOptics />
         <div className="sun-disc">
           <SunBody />
         </div>

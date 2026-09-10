@@ -1260,6 +1260,32 @@ body.reading-mushaf.show-app-chrome .tabbar-dock {
   height: 10vmin;
   overflow: visible;
   filter: drop-shadow(0 0 6vmin var(--sun-halo));
+  box-shadow: 0 0 2vmin var(--sun-core), 0 0 5vmin var(--sun-halo);
+}
+
+.sun-optics {
+  position: absolute;
+  width: 52vmin;
+  height: 52vmin;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  overflow: visible;
+  opacity: var(--solar-rays, 0.6);
+  transition: opacity 6s ease;
+}
+.solar-rays {
+  transform-origin: 200px 200px;
+  animation: solar-drift 38s ease-in-out infinite alternate;
+}
+.solar-glints { animation: solar-shimmer 11s ease-in-out infinite alternate; }
+@keyframes solar-drift {
+  from { transform: rotate(-4deg) scale(.94); opacity: .68; }
+  to { transform: rotate(5deg) scale(1.04); opacity: .95; }
+}
+@keyframes solar-shimmer { from { opacity: .45; } to { opacity: .8; } }
+@media (prefers-reduced-motion: reduce) {
+  .solar-rays, .solar-glints, .sun-corona { animation: none; }
 }
 
 .sun-body,

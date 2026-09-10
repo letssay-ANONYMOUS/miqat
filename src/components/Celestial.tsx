@@ -20,7 +20,7 @@ export function SunBody() {
       <defs>
         {/* Limb darkening: real stars are brighter at the centre of the disc,
             because you see deeper, hotter gas there. */}
-        <radialGradient id="sun-disc" cx="42%" cy="38%" r="72%">
+        <radialGradient id="sun-disc" cx="38%" cy="32%" r="72%">
           <stop offset="0%" stopColor="#fffdf6" />
           <stop offset="34%" stopColor="var(--sun-core)" />
           <stop offset="76%" stopColor="var(--sun-halo)" />
@@ -47,8 +47,50 @@ export function SunBody() {
       <circle cx="50" cy="50" r="50" fill="url(#sun-disc)" />
       <circle cx="50" cy="50" r="50" fill="#ffffff" opacity="0.5" filter="url(#sun-grain)" />
       <circle cx="50" cy="50" r="50" fill="url(#sun-rim)" />
+      <ellipse cx="38" cy="31" rx="29" ry="23" fill="white" opacity="0.15" />
+      <circle cx="50" cy="50" r="48.5" fill="none" stroke="var(--sun-core)" strokeWidth="1.1" opacity="0.6" />
     </svg>
   );
+}
+
+/** Optical layers stay outside the sphere so rays retain a soft tapered edge. */
+export function SunOptics() {
+  return <svg viewBox="0 0 400 400" className="sun-optics" aria-hidden="true">
+    <defs>
+      <radialGradient id="solar-scatter">
+        <stop offset="0" stopColor="var(--sun-core)" stopOpacity="0.95" />
+        <stop offset="0.17" stopColor="var(--sun-core)" stopOpacity="0.55" />
+        <stop offset="0.4" stopColor="var(--sun-halo)" stopOpacity="0.13" />
+        <stop offset="1" stopColor="var(--sun-halo)" stopOpacity="0" />
+      </radialGradient>
+      <linearGradient id="solar-ray" x1="0" y1="1" x2="0" y2="0">
+        <stop offset="0" stopColor="var(--sun-core)" stopOpacity="0.65" />
+        <stop offset="0.3" stopColor="var(--sun-core)" stopOpacity="0.35" />
+        <stop offset="1" stopColor="var(--sun-core)" stopOpacity="0" />
+      </linearGradient>
+      <radialGradient id="solar-glint">
+        <stop offset="0" stopColor="white" stopOpacity="0.75" />
+        <stop offset="0.4" stopColor="var(--sun-core)" stopOpacity="0.22" />
+        <stop offset="1" stopColor="var(--sun-halo)" stopOpacity="0" />
+      </radialGradient>
+    </defs>
+    <circle cx="200" cy="200" r="198" fill="url(#solar-scatter)" />
+    <g className="solar-rays">
+      {Array.from({ length: 20 }, (_, i) => {
+        const tip = 12 + ((i * 37) % 70);
+        const width = i % 3 === 0 ? 9 : 3;
+        return <path key={i} transform={`rotate(${i * 18 + 7} 200 200)`}
+          d={`M${200 - width} 181 Q195 135 200 ${tip} Q205 135 ${200 + width} 181 Z`}
+          fill="url(#solar-ray)" opacity={i % 3 === 0 ? 0.85 : 0.5} />;
+      })}
+    </g>
+    <g className="solar-glints">
+      <ellipse cx="200" cy="200" rx="182" ry="3" fill="url(#solar-glint)" transform="rotate(-14 200 200)" />
+      <ellipse cx="200" cy="200" rx="2" ry="150" fill="url(#solar-glint)" transform="rotate(-14 200 200)" />
+      <circle cx="249" cy="255" r="16" fill="url(#solar-glint)" opacity="0.24" />
+      <circle cx="280" cy="289" r="24" fill="none" stroke="var(--sun-halo)" strokeWidth="0.7" opacity="0.08" />
+    </g>
+  </svg>;
 }
 
 export function MoonBody({ date }: { date: Date }) {
