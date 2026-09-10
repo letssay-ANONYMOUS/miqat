@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import geomagnetism from 'geomagnetism';
-import { currentPosition } from '../lib/geo';
+import { distanceMeters, qiblaIssue, type QiblaFix, type QiblaIssue } from '../lib/qiblaQuality';
 import { qiblaDegrees } from '../lib/prayer';
-import { lerpAngle, readingFrom, relativeTurn, solarCalibration, type Reading } from '../lib/heading';
+import { lerpAngle, normaliseSigned, screenAngle, readingFrom, relativeTurn, solarCalibration, type Reading } from '../lib/heading';
 import { sunPosition } from '../lib/sun';
 import { useStore } from '../lib/store';
 import { haptic, hapticsAvailable } from '../lib/feel';
@@ -31,12 +31,18 @@ const CARDINALS = [
  * always offered alongside it.
  */
 export function QiblaCompass({ bearing: savedBearing }: { bearing: number }) {
-  const [fix, setFix] = useState<{ latitude: number; longitude: number; accuracy: number } | null>(null);
+  const [fix, setFix] = useState<QiblaFix | null>(null);
+  const watch = useRef<number | null>(null);
+  const absoluteAt = useRef(-Infinity);
+  const stableSince = useRef(0);
+  const [issue, setIssue] = useState<QiblaIssue | null>('location');
+  const issueRef = useRef<QiblaIssue | null>('location');
   const [locationMessage, setLocationMessage] = useState('');
   const [locating, setLocating] = useState(false);
   const place = useStore((state) => state.place);
-  const qiblaOffset = useStore((state) => state.qiblaOffset);
-  const setQiblaOffset = useStore((state) => state.setQiblaOffset);
+  // Calibration applies only to this session and location, never to a later trip.
+  const [qiblaOffset, setQiblaOffset] = useState<number | null>(null);
+  const calibrationAt = useRef<{ latitude: number; longitude: number } | null>(null);
   const { isArabic, text } = useI18n();
   const bearing = fix ? qiblaDegrees(fix.latitude, fix.longitude) : savedBearing;
   const latitude = fix?.latitude ?? place?.latitude;
@@ -72,15 +78,20 @@ export function QiblaCompass({ bearing: savedBearing }: { bearing: number }) {
     return () => clearInterval(id);
   }, []);
 
+  useEffect(() => () => { if (watch.current !== null) navigator.geolocation.clearWatch(watch.current); }, []);
+
   useEffect(() => {
     if (status !== 'live' || listening.current) return;
     listening.current = true;
     const onOrientation = (event: Event) => {
+      const orientation = event as DeviceOrientationEvent;
+      const apple = 'webkitCompassHeading' in orientation;
+      const absolute = orientation.absolute === true || event.type === 'deviceorientationabsolute';
+      if (!apple && !absolute && performance.now() - absoluteAt.current < 2000) return;
+      if (absolute) absoluteAt.current = performance.now();
       const next = readingFrom(event as DeviceOrientationEvent);
-      if (next && (next.reference !== 'unusable' || raw.current?.reference === 'unusable' || !raw.current)) {
-        raw.current = next;
-        receivedAt.current = performance.now();
-      }
+      raw.current = next;
+      receivedAt.current = performance.now();
     };
     // iOS puts webkitCompassHeading on deviceorientation; absolute is extra on Android.
     window.addEventListener('deviceorientation', onOrientation, true);
@@ -100,15 +111,29 @@ export function QiblaCompass({ bearing: savedBearing }: { bearing: number }) {
     const tick = (time: number) => {
       raf = requestAnimationFrame(tick);
       const sample = raw.current;
-      if (!sample || time - receivedAt.current > 2000 || sample.reference === 'unusable' || sample.level < 0.45 || (sample.accuracy !== null && (sample.accuracy < 0 || sample.accuracy > 20))) {
+      const correction = qiblaOffset ?? (sample?.reference === 'true' ? 0 : declination);
+      const problem = qiblaIssue(fix, sample, time - receivedAt.current, screenAngle(), correction);
+      if (issueRef.current !== problem) {
+        issueRef.current = problem;
+        setIssue(problem);
+      }
+      if (problem || !sample || document.visibilityState !== 'visible') {
+        if (needle.current) needle.current.style.visibility = 'hidden';
+        if (rose.current) rose.current.setAttribute('transform', 'rotate(0 200 200)');
+        primed.current = false;
+        stableSince.current = 0;
+        wasAligned.current = false;
         setAligned(false);
-        if (sample) setReading(sample);
+        if (time - lastUi.current > 180) {
+          lastUi.current = time;
+          setReading(sample);
+        }
         return;
       }
 
       const dt = lastFrame.current ? Math.min(0.05, (time - lastFrame.current) / 1000) : 0.016;
       lastFrame.current = time;
-      const corrected = (sample.degrees + (qiblaOffset || (sample.reference === 'magnetic' ? declination ?? 0 : 0)) + 360) % 360;
+      const corrected = (sample.degrees + correction! + 360) % 360;
       if (!primed.current) {
         shown.current = corrected;
         primed.current = true;
@@ -118,12 +143,18 @@ export function QiblaCompass({ bearing: savedBearing }: { bearing: number }) {
       const k = 1 - Math.exp(-dt / tau);
       shown.current = lerpAngle(shown.current, corrected, k);
 
-      if (rose.current) rose.current.style.transform = `rotate(${-shown.current}deg)`;
-      if (needle.current) needle.current.style.transform = `rotate(${bearing - shown.current}deg)`;
+      if (rose.current) rose.current.setAttribute('transform', `rotate(${-shown.current} 200 200)`);
+      if (needle.current) {
+        needle.current.style.visibility = 'visible';
+        needle.current.setAttribute('transform', `rotate(${bearing - shown.current} 200 200)`);
+      }
 
       const rotation = bearing - shown.current;
       const off = Math.abs(((rotation % 360) + 360) % 360);
-      const on = off < 4 || off > 356;
+      const candidate = (off < 4 || off > 356) && Math.abs(normaliseSigned(corrected - shown.current)) < 2 && sample.accuracy !== null && sample.accuracy <= 5;
+      if (!candidate) stableSince.current = 0;
+      else if (!stableSince.current) stableSince.current = time;
+      const on = candidate && time - stableSince.current > 1000;
 
       if (on && !wasAligned.current) haptic('lock');
       wasAligned.current = on;
@@ -156,17 +187,39 @@ export function QiblaCompass({ bearing: savedBearing }: { bearing: number }) {
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [status, bearing, qiblaOffset, ios, declination]);
+  }, [status, bearing, qiblaOffset, ios, declination, fix]);
 
   const enable = async () => {
     setLocating(true);
     setLocationMessage('');
-    const gps = currentPosition().then(({ coords }) => {
-      setFix({ latitude: coords.latitude, longitude: coords.longitude, accuracy: coords.accuracy });
-      setQiblaOffset(0);
+    setFix(null);
+    issueRef.current = 'location';
+    setIssue('location');
+    setQiblaOffset(null);
+    calibrationAt.current = null;
+    if (watch.current !== null) navigator.geolocation?.clearWatch(watch.current);
+    if (navigator.geolocation) watch.current = navigator.geolocation.watchPosition(({ coords, timestamp }) => {
+      if (
+        calibrationAt.current &&
+        distanceMeters(
+          calibrationAt.current.latitude,
+          calibrationAt.current.longitude,
+          coords.latitude,
+          coords.longitude,
+        ) > 100
+      ) {
+        calibrationAt.current = null;
+        setQiblaOffset(null);
+      }
+      setFix({ latitude: coords.latitude, longitude: coords.longitude, accuracy: coords.accuracy, timestamp });
+      setLocating(false);
       setLocationMessage(text(`GPS accuracy: ±${Math.round(coords.accuracy)} m`, `دقة الموقع: ±${Math.round(coords.accuracy)} م`));
-    }).catch(() => setLocationMessage(text('Location unavailable. Using your saved city; allow Location in Safari settings and retry.', 'تعذر تحديد الموقع. نستخدم المدينة المحفوظة؛ اسمح بالموقع في إعدادات Safari ثم أعد المحاولة.'))).finally(() => setLocating(false));
-    void gps;
+    }, () => {
+      setFix(null);
+      setLocating(false);
+      setLocationMessage(text('Location unavailable. Allow precise location in your browser settings and retry. The live arrow is disabled.', 'الموقع غير متاح. اسمح بالموقع الدقيق في إعدادات المتصفح وأعد المحاولة. تم إيقاف السهم المباشر.'));
+    }, { enableHighAccuracy: true, maximumAge: 0, timeout: 15000 });
+    else { setLocating(false); setLocationMessage(text('Location is not supported in this browser.', 'هذا المتصفح لا يدعم تحديد الموقع.')); }
     if (typeof DeviceOrientationEvent === 'undefined') return setStatus('unsupported');
     const ctor = DeviceOrientationEvent as PermissionCapableCtor;
     try {
@@ -187,11 +240,14 @@ export function QiblaCompass({ bearing: savedBearing }: { bearing: number }) {
   const sunUp = sun !== null && sun.altitude > 1;
   const fromSun = sun ? relativeTurn(sun.azimuth, bearing) : null;
 
-  const live = reading !== null && reading.reference !== 'unusable';
+  const live = issue === null && status === 'live' && reading !== null;
   const shaky = reading !== null && (reading.level < 0.45 || (reading.accuracy ?? 0) < 0 || (reading.accuracy ?? 0) > 20);
 
   const calibrate = () => {
-    if (raw.current && sun && !shaky) setQiblaOffset(solarCalibration(sun.azimuth, raw.current.degrees));
+    if (raw.current && sun && live && !shaky && fix) {
+      calibrationAt.current = { latitude: fix.latitude, longitude: fix.longitude };
+      setQiblaOffset(solarCalibration(sun.azimuth, raw.current.degrees));
+    }
   };
 
   return (
@@ -200,6 +256,14 @@ export function QiblaCompass({ bearing: savedBearing }: { bearing: number }) {
         {locating ? text('Finding your location…', 'جارٍ تحديد موقعك…') : text('Use current location & compass', 'استخدام الموقع الحالي والبوصلة')}
       </button>
       {locationMessage && <p className="mb-3 max-w-sm text-center text-xs text-[var(--ink-dim)]">{locationMessage}</p>}
+      {status !== 'denied' && status !== 'unsupported' && (
+      <p className="mb-3 max-w-sm text-center text-sm" role="status">
+        {issue ? text(
+          ({ location: 'Enable precise location to use the live arrow.', 'location-stale': 'Location is stale. Refresh your location.', 'location-poor': 'Location is too imprecise. Move outdoors and retry.', 'near-kaaba': 'Too close to the Kaaba for a reliable phone bearing. Use the visible Kaaba or mosque alignment.', portrait: 'Hold the phone in portrait orientation.', waiting: 'Waiting for a compass reading.', stale: 'Compass data stopped. The arrow is hidden.', relative: 'This browser is not providing a compass heading.', flat: 'Hold the screen face up and nearly flat.', 'sensor-poor': 'Compass accuracy is poor. Remove magnetic accessories and recalibrate.', model: 'Magnetic correction unavailable. Live arrow disabled.' } as const)[issue],
+          ({ location: 'فعّل الموقع الدقيق لاستخدام السهم المباشر.', 'location-stale': 'الموقع قديم. حدّث موقعك.', 'location-poor': 'الموقع غير دقيق. انتقل إلى مكان مفتوح وأعد المحاولة.', 'near-kaaba': 'أنت قريب جدًا من الكعبة لاتجاه موثوق بالهاتف. اعتمد الكعبة المرئية أو اتجاه المسجد.', portrait: 'استخدم وضع الشاشة العمودي.', waiting: 'بانتظار قراءة البوصلة.', stale: 'توقفت بيانات البوصلة. تم إخفاء السهم.', relative: 'المتصفح لا يوفر اتجاه بوصلة.', flat: 'اجعل الشاشة لأعلى والهاتف شبه أفقي.', 'sensor-poor': 'دقة البوصلة ضعيفة. أزل الملحقات المغناطيسية وأعد المعايرة.', model: 'تصحيح الشمال غير متاح. السهم متوقف.' } as const)[issue])
+          : text('Estimated phone direction — confirm against a trusted mosque alignment.', 'اتجاه تقديري للهاتف — قارنه باتجاه مسجد موثوق.')}
+      </p>
+      )}
       <div className={`qibla-stage${aligned ? ' is-aligned' : ''}`}>
         <svg viewBox="0 0 400 400" className="qibla-face" aria-label={text(`Qibla ${bearing.toFixed(1)} degrees from true north`, `اتجاه القبلة ${bearing.toFixed(1)} درجة من الشمال الحقيقي`)}>
           <defs>
@@ -226,9 +290,7 @@ export function QiblaCompass({ bearing: savedBearing }: { bearing: number }) {
           <g
             ref={rose}
             className="qibla-spin"
-            style={{
-              transformOrigin: '200px 200px',
-            }}
+            transform="rotate(0 200 200)"
           >
             {Array.from({ length: 72 }, (_, i) => {
               const major = i % 9 === 0;
@@ -282,10 +344,7 @@ export function QiblaCompass({ bearing: savedBearing }: { bearing: number }) {
           <g
             ref={needle}
             className="qibla-spin"
-            opacity={shaky ? 0.4 : 1}
-            style={{
-              transformOrigin: '200px 200px',
-            }}
+            style={{ visibility: 'hidden' }}
           >
             <path d="M200 74 L212 196 L200 186 L188 196 Z" fill="url(#q-needle)" />
             <path d="M200 74 L206 136 L200 130 L194 136 Z" fill="#ffffff" opacity="0.32" />
@@ -298,63 +357,35 @@ export function QiblaCompass({ bearing: savedBearing }: { bearing: number }) {
         <div className="qibla-readout">
           <p className="tabular qibla-degrees">{bearing.toFixed(1)}°</p>
           <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--ink-faint)]">
-            {text('from true north', 'من الشمال الحقيقي')}
+            {live ? text('from true north', 'من الشمال الحقيقي') : text('North-up reference · not phone direction', 'مرجع شمالي · ليس اتجاه الهاتف')}
           </p>
         </div>
       </div>
 
       <div className="mt-6 w-full max-w-sm space-y-3 text-center">
-        {sunUp && fromSun && (
+        {fix && sunUp && fromSun && (
           <p className="text-sm leading-relaxed text-[var(--ink-dim)]">
             {text('Face the sun, then turn', 'واجه الشمس، ثم استدر')}{' '}
             <span className="font-semibold text-[var(--ink)]">
               {fromSun.degrees}° {text(`to your ${fromSun.side}`, fromSun.side === 'left' ? 'إلى يسارك' : 'إلى يمينك')}
             </span>
-            {text('. Exact — from the sun’s position, no compass involved.', '. اتجاه دقيق محسوب من موقع الشمس، من دون استخدام البوصلة.')}
-          </p>
-        )}
-
-        {status === 'idle' && (
-          <button
-            onClick={() => {
-              haptic('soft');
-              void enable();
-            }}
-            className="w-full rounded-2xl bg-[var(--accent)] px-5 py-3.5 text-sm font-semibold text-[var(--on-accent)] transition active:brightness-110"
-          >
-            {text('Turn on the live compass', 'تشغيل البوصلة المباشرة')}
-          </button>
-        )}
-
-        {status === 'live' && !reading && (
-          <p className="text-sm text-[var(--ink-dim)]">{text('Waiting for the compass…', 'بانتظار قراءة البوصلة…')}</p>
-        )}
-
-        {reading?.reference === 'unusable' && (
-          <p className="text-sm leading-relaxed text-[var(--ink-dim)]">
-            {text('This browser reports orientation relative to however the phone was held when the page opened, not to the earth — it cannot be a compass. Use the sun instead.', 'يبلغ هذا المتصفح عن الاتجاه نسبةً إلى وضع الهاتف عند فتح الصفحة، لا نسبةً إلى الأرض، لذلك لا يمكن استخدامه كبوصلة. استخدم الشمس بدلًا منه.')}
-          </p>
-        )}
-
-        {live && shaky && (
-          <p className="text-sm text-[var(--ink-dim)]">
-            {text('Hold the phone flat, away from metal — the reading is unsteady.', 'أمسك الهاتف أفقيًا وبعيدًا عن المعادن، فالقراءة غير مستقرة.')}
+            {text('. Calculated from the sun. Never look directly at it.', '. محسوب من موقع الشمس. لا تنظر إليها مباشرة.')}
           </p>
         )}
 
         {live && !hapticsAvailable && (
           <p className="text-xs leading-relaxed text-[var(--ink-faint)]">
-            {text('No buzz on this device — iPhones give web pages no way to trigger haptics. The dial still glows when you are on the Qibla.', 'لا يتوفر اهتزاز على هذا الجهاز، إذ لا تسمح هواتف iPhone لصفحات الويب بتشغيل اللمسات الاهتزازية. ستظل الحلقة تتوهج عند محاذاة القبلة.')}
+            {text('This browser exposes no haptic feedback. The dial still changes when alignment is stable.', 'هذا المتصفح لا يوفر اهتزازًا. ستظل الحلقة تتغير عند ثبات المحاذاة.')}
           </p>
         )}
 
         {live && !shaky && (
           <p className="text-sm text-[var(--ink-dim)]">
-            {declination !== null && qiblaOffset === 0
+            {declination !== null && qiblaOffset === null
               ? text('Heading corrected to true north for your location.', 'تم تصحيح الاتجاه إلى الشمال الحقيقي بحسب موقعك.')
               : reading?.reference === 'true'
               ? text('Live, referenced to true north.', 'قراءة مباشرة نسبةً إلى الشمال الحقيقي.')
-              : qiblaOffset !== 0
+              : qiblaOffset !== null
                 ? text('Live, corrected against the sun.', 'قراءة مباشرة مصححة باستخدام الشمس.')
                 : text('Live, from magnetic north — a couple of degrees off in the UAE, more elsewhere.', 'قراءة مباشرة من الشمال المغناطيسي؛ قد تنحرف بضع درجات في الإمارات وأكثر في أماكن أخرى.')}
           </p>
@@ -365,15 +396,18 @@ export function QiblaCompass({ bearing: savedBearing }: { bearing: number }) {
             onClick={calibrate}
             className="w-full rounded-2xl border border-[var(--card-line)] px-5 py-3 text-sm font-medium transition active:bg-white/10"
           >
-            {qiblaOffset === 0
-              ? text('Calibrate: aim the top of the phone at the sun, then tap', 'للمعايرة: وجّه أعلى الهاتف نحو الشمس ثم اضغط')
+            {qiblaOffset === null
+              ? text('Calibrate safely: use a shadow to align the phone’s top edge with the sun, then tap', 'للمعايرة بأمان: استخدم الظل لمحاذاة أعلى الهاتف مع اتجاه الشمس ثم اضغط')
               : text('Re-calibrate against the sun', 'إعادة المعايرة باستخدام الشمس')}
           </button>
         )}
 
-        {qiblaOffset !== 0 && (
+        {qiblaOffset !== null && (
           <button
-            onClick={() => setQiblaOffset(0)}
+            onClick={() => {
+              calibrationAt.current = null;
+              setQiblaOffset(null);
+            }}
             className="text-xs text-[var(--ink-dim)] underline underline-offset-4"
           >
             {text('Clear the', 'مسح تصحيح')} {qiblaOffset > 0 ? '+' : ''}
@@ -383,12 +417,12 @@ export function QiblaCompass({ bearing: savedBearing }: { bearing: number }) {
 
         {status === 'denied' && (
           <p className="text-sm text-[var(--ink-dim)]">
-            {text('Motion access refused. The angle above is still exact, from true north.', 'تم رفض إذن الحركة. تظل الزاوية أعلاه دقيقة ومحسوبة من الشمال الحقيقي.')}
+            {text('Motion access was refused. The live arrow is disabled; the angle above is only a north-up reference.', 'تم رفض إذن الحركة. السهم المباشر متوقف؛ الزاوية أعلاه مرجع شمالي فقط.')}
           </p>
         )}
         {status === 'unsupported' && (
           <p className="text-sm text-[var(--ink-dim)]">
-            {text('No compass on this device. The angle above is from true north.', 'لا توجد بوصلة في هذا الجهاز. الزاوية أعلاه محسوبة من الشمال الحقيقي.')}
+            {text('This browser exposes no usable compass. The live arrow is disabled.', 'هذا المتصفح لا يوفر بوصلة قابلة للاستخدام. السهم المباشر متوقف.')}
           </p>
         )}
       </div>

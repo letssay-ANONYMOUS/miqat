@@ -23,6 +23,12 @@
 
 const DEG = Math.PI / 180;
 
+/** Positive only when the screen faces up; reject edge-on and face-down use. */
+export function faceUpLevel(beta: number | null, gamma: number | null): number {
+  if (beta === null || gamma === null || !Number.isFinite(beta) || !Number.isFinite(gamma)) return 0;
+  return Math.cos(beta * DEG) * Math.cos(gamma * DEG);
+}
+
 export type HeadingReference = 'true' | 'magnetic' | 'unusable';
 
 export interface Reading {
@@ -78,11 +84,11 @@ export function readingFrom(event: DeviceOrientationEvent): Reading | null {
   // Apple's heading references magnetic north, not true north.
   if (typeof ios.webkitCompassHeading === 'number' && Number.isFinite(ios.webkitCompassHeading)) {
     const accuracy =
-      typeof ios.webkitCompassAccuracy === 'number' ? ios.webkitCompassAccuracy : null;
+      typeof ios.webkitCompassAccuracy === 'number' && Number.isFinite(ios.webkitCompassAccuracy) ? ios.webkitCompassAccuracy : null;
     return {
       degrees: (ios.webkitCompassHeading + screenAngle() + 360) % 360,
       reference: ios.webkitCompassHeading < 0 ? 'unusable' : 'magnetic',
-      level: event.beta == null ? 0 : Math.abs(Math.cos(event.beta * DEG)),
+      level: faceUpLevel(event.beta, event.gamma),
       accuracy,
     };
   }
@@ -100,7 +106,7 @@ export function readingFrom(event: DeviceOrientationEvent): Reading | null {
      * is reported as unusable rather than quietly drawn as a direction.
      */
     reference: event.absolute ? 'magnetic' : 'unusable',
-    level: solved.level,
+    level: faceUpLevel(event.beta, event.gamma),
     accuracy: null,
   };
 }

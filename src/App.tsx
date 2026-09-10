@@ -424,7 +424,7 @@ export default function App() {
                 )}
               </p>
               <p className="mt-2">
-                {text('In daylight the sun reading above needs no compass at all, and is exact.', 'في ضوء النهار لا تحتاج قراءة الشمس أعلاه إلى البوصلة، وهي دقيقة.')}
+                {text('The daylight reference is calculated from your location and the sun. Check the direction using shadows; never look directly at the sun.', 'مرجع النهار محسوب من موقعك والشمس. تحقّق باستخدام الظلال ولا تنظر إلى الشمس مباشرة.')}
               </p>
             </div>
           </section>
