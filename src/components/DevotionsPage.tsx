@@ -190,6 +190,7 @@ function DhikrCounter() {
   const { dhikrHistory, recordDhikr, resetDhikr } = useStore();
   const [kind, setKind] = useState<DhikrKind>('istighfar');
   const [session, setSession] = useState(0);
+  const sessionRef = useRef(0);
   const [focusLocked, setFocusLocked] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
   const [unlocking, setUnlocking] = useState(false);
@@ -239,7 +240,8 @@ function DhikrCounter() {
   }, [focusLocked]);
 
   const increment = () => {
-    const next = session + 1;
+    const next = sessionRef.current + 1;
+    sessionRef.current = next;
     pending.current += 1;
     setSession(next);
     if (!isIOS) haptic('tick');
@@ -250,6 +252,7 @@ function DhikrCounter() {
   const chooseKind = (next: DhikrKind) => {
     flush();
     setKind(next);
+    sessionRef.current = 0;
     setSession(0);
     haptic('soft');
   };
@@ -257,6 +260,7 @@ function DhikrCounter() {
   const confirmReset = () => {
     flush();
     resetDhikr(today, kind);
+    sessionRef.current = 0;
     setSession(0);
     setResetOpen(false);
     haptic('lock');
@@ -413,7 +417,55 @@ function DhikrCounter() {
 function CounterButton({ phrase, onPress, locked = false }: { phrase: string; onPress: () => void; locked?: boolean }) {
   const { text } = useI18n();
   const nativeSwitch = useRef<HTMLInputElement>(null);
+  const visual = useRef<HTMLElement | null>(null);
+  const pointer = useRef<number | null>(null);
+  const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const counted = useRef(false);
   useEffect(() => { nativeSwitch.current?.setAttribute('switch', ''); }, []);
+  useEffect(() => () => {
+    if (holdTimer.current) clearTimeout(holdTimer.current);
+  }, []);
+
+  const countOnce = () => {
+    if (counted.current) return;
+    counted.current = true;
+    onPress();
+  };
+
+  const startPress = (event: React.PointerEvent<HTMLElement>) => {
+    if (!event.isPrimary || event.button !== 0) return;
+    if (holdTimer.current) clearTimeout(holdTimer.current);
+    pointer.current = event.pointerId;
+    counted.current = false;
+    visual.current?.classList.add('is-pressing');
+    visual.current?.classList.remove('is-deep');
+    try { event.currentTarget.setPointerCapture(event.pointerId); } catch { /* WebKit may own the native switch capture. */ }
+    holdTimer.current = setTimeout(() => {
+      visual.current?.classList.add('is-deep');
+      countOnce();
+    }, 380);
+  };
+
+  const finishPress = (event: React.PointerEvent<HTMLElement>, cancelled = false) => {
+    if (pointer.current !== event.pointerId) return;
+    if (holdTimer.current) clearTimeout(holdTimer.current);
+    holdTimer.current = null;
+    pointer.current = null;
+    if (!cancelled) countOnce();
+    visual.current?.classList.remove('is-pressing', 'is-deep');
+    try {
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }
+    } catch { /* Already released by the browser. */ }
+  };
+
+  const pointerProps = {
+    onPointerDown: startPress,
+    onPointerUp: (event: React.PointerEvent<HTMLElement>) => finishPress(event),
+    onPointerCancel: (event: React.PointerEvent<HTMLElement>) => finishPress(event, true),
+    onContextMenu: (event: React.MouseEvent<HTMLElement>) => event.preventDefault(),
+  };
   const content = <>
     <span className="counter-button-rim" aria-hidden="true" />
     <span className="relative z-10 block text-[11px] uppercase tracking-[0.18em] opacity-60">{text('Tap to count', 'اضغط للعد')}</span>
@@ -421,15 +473,25 @@ function CounterButton({ phrase, onPress, locked = false }: { phrase: string; on
     <span dir="ltr" className="relative z-10 mt-3 block text-sm font-medium opacity-55">+1</span>
   </>;
   if (isIOS) return <div className={`counter-plinth mx-auto mt-7${locked ? ' is-locked' : ''}`}>
-    <label className="counter-button native-counter">
+    <label ref={(node) => { visual.current = node; }} className="counter-button native-counter">
       {content}
-      <input ref={nativeSwitch} type="checkbox" className="counter-native-switch" onChange={onPress}
+      <input ref={nativeSwitch} type="checkbox" className="counter-native-switch" onChange={() => undefined}
+        {...pointerProps}
         aria-label={text(`Count ${phrase}`, `عدّ ${phrase}`)} />
     </label>
   </div>;
   return (
     <div className={`counter-plinth mx-auto mt-7${locked ? ' is-locked' : ''}`}>
-      <button type="button" className="counter-button" onClick={onPress} aria-label={text(`Count ${phrase}`, `عدّ ${phrase}`)}>
+      <button
+        ref={(node) => { visual.current = node; }}
+        type="button"
+        className="counter-button"
+        {...pointerProps}
+        onClick={(event) => {
+          if (event.detail === 0) onPress();
+        }}
+        aria-label={text(`Count ${phrase}`, `عدّ ${phrase}`)}
+      >
         <span className="counter-button-rim" aria-hidden="true" />
         <span className="relative z-10 block text-[11px] uppercase tracking-[0.18em] opacity-60">{text('Tap to count', 'اضغط للعد')}</span>
         <span className="relative z-10 mt-2 block text-xl font-semibold">{phrase}</span>

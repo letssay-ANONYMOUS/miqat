@@ -87,7 +87,15 @@ const TABS: { id: Page; label: string; labelAr: string; icon: ReactNode }[] = [
  */
 const TOP = 24;
 
-export function TabBar({ page, onChange }: { page: Page; onChange: (page: Page) => void }) {
+export function TabBar({
+  page,
+  onChange,
+  onIntent,
+}: {
+  page: Page;
+  onChange: (page: Page) => void;
+  onIntent?: (page: Page) => void;
+}) {
   const { isArabic, text } = useI18n();
   const rail = useRef<HTMLDivElement>(null);
   const bar = useRef<HTMLDivElement>(null);
@@ -231,6 +239,9 @@ export function TabBar({ page, onChange }: { page: Page; onChange: (page: Page) 
                     ? text('Collapse navigation', 'طي شريط التنقل')
                     : isArabic ? tab.labelAr : tab.label
                 }
+                onPointerDown={() => onIntent?.(tab.id)}
+                onPointerEnter={() => onIntent?.(tab.id)}
+                onFocus={() => onIntent?.(tab.id)}
                 onClick={() => select(tab.id)}
                 className={`tabbar-item ${page === tab.id ? 'text-[var(--ink)]' : 'text-[var(--ink-dim)]'}`}
                 style={{ '--i': i } as CSSProperties}

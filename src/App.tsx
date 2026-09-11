@@ -1,20 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import { Sky } from './components/Sky';
-import { QiblaCompass } from './components/QiblaCompass';
 import { LocationSheet } from './components/LocationSheet';
-import { SettingsContent } from './components/SettingsSheet';
-import { VerifySheet } from './components/VerifySheet';
 import { TabBar, type Page } from './components/TabBar';
-import { VerificationNote } from './components/VerificationNote';
-import { AuditStatus } from './components/AuditStatus';
-import { MonthContent } from './components/MonthSheet';
-import { QuranPage } from './components/QuranPage';
 import { Onboarding } from './components/Onboarding';
 import { Segmented } from './components/Segmented';
 import { Countdown } from './components/Countdown';
 import { PrayerBoard } from './components/PrayerBoard';
 import { Dial } from './components/Dial';
 import { DailyWidget } from './components/DailyWidget';
+import { DevotionsPage } from './components/DevotionsPage';
 import { METHOD_BY_KEY } from './lib/methods';
 import {
   PRAYER_META,
@@ -40,7 +34,6 @@ import { track } from './lib/analytics';
 import { isNowPlaying, startNowPlaying, stopNowPlaying, update as updateNowPlaying } from './lib/nowPlaying';
 import { useI18n } from './lib/i18n';
 import { localizedUaeName } from './lib/uaePlaces';
-import { DevotionsPage } from './components/DevotionsPage';
 import { writePreferenceCookie } from './lib/preferenceCookie';
 
 type SheetName = 'location' | 'verify';
@@ -49,8 +42,41 @@ type SheetName = 'location' | 'verify';
     between the prayer name and the board without touching either. */
 const RING_SIZE = 'clamp(13.5rem, 62vw, 17rem)';
 
+const loadQiblaPage = () => import('./components/QiblaPage');
+const loadQuranPage = () => import('./components/QuranPage');
+const loadMonthPage = () => import('./components/MonthSheet');
+const loadSettingsPage = () => import('./components/SettingsPage');
+const loadVerifySheet = () => import('./components/VerifySheet');
+const loadQuranData = () => import('./lib/quran').then((module) => module.loadQuran());
+
+const QiblaPage = lazy(loadQiblaPage);
+const QuranPage = lazy(async () => ({ default: (await loadQuranPage()).QuranPage }));
+const MonthContent = lazy(async () => ({ default: (await loadMonthPage()).MonthContent }));
+const SettingsPage = lazy(loadSettingsPage);
+const VerifySheet = lazy(async () => ({ default: (await loadVerifySheet()).VerifySheet }));
+
+function preloadPage(page: Page) {
+  if (page === 'qibla') return loadQiblaPage();
+  if (page === 'quran') return Promise.all([loadQuranPage(), loadQuranData()]);
+  if (page === 'month') return loadMonthPage();
+  if (page === 'settings') return loadSettingsPage();
+  return Promise.resolve();
+}
+
+function PageFallback() {
+  return (
+    <div className="grid min-h-[16rem] place-items-center bg-[var(--sky-bottom)]" aria-live="polite">
+      <span className="h-10 w-10 animate-pulse rounded-full border border-[var(--card-line)] bg-[var(--card)]" />
+    </div>
+  );
+}
+
 export default function App() {
-  const { place, settings, viewMode, setViewMode, sharePreciseLocation } = useStore();
+  const place = useStore((state) => state.place);
+  const settings = useStore((state) => state.settings);
+  const viewMode = useStore((state) => state.viewMode);
+  const setViewMode = useStore((state) => state.setViewMode);
+  const sharePreciseLocation = useStore((state) => state.sharePreciseLocation);
   const { language, locale, isArabic, text, methodLabel, methodSummary } = useI18n();
   const [now, setNow] = useState(() => new Date());
   const [sheet, setSheet] = useState<SheetName | null>(null);
@@ -62,9 +88,40 @@ export default function App() {
   const [quranRequest, setQuranRequest] = useState<{ surah: number; token: number } | null>(null);
 
   useEffect(() => {
-    const id = setInterval(() => setNow(new Date()), 1000);
+    setNow(new Date());
+    const foregroundClock = page === 'times' && !devotionsOpen && !quranReading;
+    if (!foregroundClock && !settings.lockScreenEnabled) return;
+    const id = setInterval(() => setNow(new Date()), foregroundClock ? 1000 : 30_000);
     return () => clearInterval(id);
-  }, []);
+  }, [page, devotionsOpen, quranReading, settings.lockScreenEnabled]);
+
+  useEffect(() => {
+    if (devotionsOpen) return;
+    let cancelled = false;
+    let nextTimer = 0;
+    const loaders = [loadQiblaPage, loadQuranPage, loadMonthPage, loadSettingsPage, loadVerifySheet];
+    nextTimer = window.setTimeout(async () => {
+      for (const load of loaders) {
+        if (cancelled) return;
+        await load().catch(() => undefined);
+        if (cancelled) return;
+        await new Promise<void>((resolve) => {
+          nextTimer = window.setTimeout(resolve, 320);
+        });
+      }
+      const connection = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection;
+      if (!cancelled && !connection?.saveData) {
+        await new Promise<void>((resolve) => {
+          nextTimer = window.setTimeout(resolve, 3_000);
+        });
+        if (!cancelled) await loadQuranData().catch(() => undefined);
+      }
+    }, 900);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(nextTimer);
+    };
+  }, [devotionsOpen]);
 
   useEffect(() => {
     document.documentElement.lang = language;
@@ -217,6 +274,22 @@ export default function App() {
 
   if (!place || !days || !next) return <Onboarding />;
 
+  if (devotionsOpen) {
+    return (
+      <div lang={language} dir={isArabic ? 'rtl' : 'ltr'} className="min-h-dvh bg-[var(--sky-bottom)]">
+        <DevotionsPage
+          onClose={() => setDevotionsOpen(false)}
+          onOpenMulk={() => {
+            setDevotionsOpen(false);
+            setQuranRequest({ surah: 67, token: Date.now() });
+            setPage('quran');
+            window.scrollTo(0, 0);
+          }}
+        />
+      </div>
+    );
+  }
+
   const method = METHOD_BY_KEY.get(settings.method)!;
   const qibla = qiblaDegrees(place.latitude, place.longitude);
   const friday = isFriday(days.today, timezone);
@@ -269,7 +342,7 @@ export default function App() {
               <circle cx="10" cy="13.7" r="2.1" stroke="currentColor" strokeWidth="1.5" />
               <path d="M7.8 7.2l1.3 4.5M12.2 7.2l-1.3 4.5M8.1 14.8l-2.7 2" stroke="currentColor" strokeWidth="1.35" strokeLinecap="round" />
             </IconButton>
-            <IconButton label={text('Accuracy', 'الدقة')} onClick={() => setSheet('verify')}>
+            <IconButton label={text('Accuracy', 'الدقة')} onIntent={() => void loadVerifySheet()} onClick={() => setSheet('verify')}>
               <path d="M10 2.5l6 2.5v5c0 3.4-2.4 6.4-6 7.5-3.6-1.1-6-4.1-6-7.5V5l6-2.5z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
               <path d="M7.5 10l1.8 1.8L13 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
             </IconButton>
@@ -413,60 +486,31 @@ export default function App() {
         )}
 
         {page === 'qibla' && (
-          <section className="flex flex-1 flex-col items-center gap-5 py-6">
-            <QiblaCompass bearing={qibla} />
-            <div className="card w-full rounded-3xl px-5 py-4 text-xs leading-relaxed text-[var(--ink-dim)]">
-              <p className="mb-2 text-[13px] font-medium text-[var(--ink)]">{text('Getting it right', 'للحصول على اتجاه دقيق')}</p>
-              <p>
-                {text(
-                  'Lay the phone flat, like a compass — held upright the sensor cannot tell which way you are facing. Keep it away from anything metal, and if the needle wanders, move the phone in a figure of eight to recalibrate it.',
-                  'ضع الهاتف أفقيًا مثل البوصلة، لأن المستشعر لا يستطيع تحديد اتجاهك عندما يكون الهاتف عموديًا. أبعده عن المعادن، وإذا تحركت الإبرة بشكل غير ثابت فحرّك الهاتف على شكل رقم 8 لإعادة المعايرة.',
-                )}
-              </p>
-              <p className="mt-2">
-                {text('The daylight reference is calculated from your location and the sun. Check the direction using shadows; never look directly at the sun.', 'مرجع النهار محسوب من موقعك والشمس. تحقّق باستخدام الظلال ولا تنظر إلى الشمس مباشرة.')}
-              </p>
-            </div>
-          </section>
+          <Suspense fallback={<PageFallback />}><QiblaPage bearing={qibla} /></Suspense>
         )}
 
         {page === 'quran' && (
           <section className={quranReading ? '' : 'flex-1 py-2'}>
-            <QuranPage onReading={setQuranReading} openRequest={quranRequest} />
+            <Suspense fallback={<PageFallback />}><QuranPage onReading={setQuranReading} openRequest={quranRequest} /></Suspense>
           </section>
         )}
 
         {page === 'month' && (
           <section className="flex-1 py-4">
-            <MonthContent />
+            <Suspense fallback={<PageFallback />}><MonthContent /></Suspense>
           </section>
         )}
 
         {page === 'settings' && (
-          <section className="flex-1 py-4">
-            <SettingsContent />
-            <div className="mt-8 space-y-3">
-              <VerificationNote />
-              <AuditStatus />
-            </div>
-          </section>
+          <Suspense fallback={<PageFallback />}><SettingsPage /></Suspense>
         )}
       </div>
 
       <LocationSheet open={sheet === 'location'} onClose={() => setSheet(null)} />
-      <VerifySheet open={sheet === 'verify'} onClose={() => setSheet(null)} />
-      <TabBar page={page} onChange={setPage} />
-      {devotionsOpen && (
-        <DevotionsPage
-          onClose={() => setDevotionsOpen(false)}
-          onOpenMulk={() => {
-            setDevotionsOpen(false);
-            setQuranRequest({ surah: 67, token: Date.now() });
-            setPage('quran');
-            window.scrollTo(0, 0);
-          }}
-        />
+      {sheet === 'verify' && (
+        <Suspense fallback={null}><VerifySheet open onClose={() => setSheet(null)} /></Suspense>
       )}
+      <TabBar page={page} onIntent={(nextPage) => void preloadPage(nextPage)} onChange={setPage} />
     </div>
   );
 }
@@ -482,16 +526,21 @@ function Stat({ label, value }: { label: string; value: string }) {
 
 function IconButton({
   label,
+  onIntent,
   onClick,
   children,
 }: {
   label: string;
+  onIntent?: () => void;
   onClick: () => void;
   children: React.ReactNode;
 }) {
   return (
     <button
       onClick={onClick}
+      onPointerDown={onIntent}
+      onPointerEnter={onIntent}
+      onFocus={onIntent}
       aria-label={label}
       title={label}
       className="flex h-11 w-11 items-center justify-center rounded-full text-[var(--ink-dim)] transition active:bg-white/15"
