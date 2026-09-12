@@ -6,7 +6,13 @@ import { useStore } from '../lib/store';
 import { PrivacySheet } from './PrivacySheet';
 import { useI18n } from '../lib/i18n';
 
-export function Onboarding() {
+export function Onboarding({
+  onOpenDevotions,
+  onOpenQuran,
+}: {
+  onOpenDevotions: () => void;
+  onOpenQuran: () => void;
+}) {
   const { setPlace, settings, patchSettings } = useStore();
   const { language, text } = useI18n();
   const [busy, setBusy] = useState(false);
@@ -72,6 +78,26 @@ export function Onboarding() {
         >
           {text('Search for a city', 'ابحث عن مدينة')}
         </button>
+
+        <div className="mt-4 grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={onOpenDevotions}
+            className="rounded-2xl border border-[var(--card-line)] px-3 py-3 text-sm font-medium text-[var(--ink-dim)] transition active:bg-white/8 active:text-[var(--ink)]"
+          >
+            {text('Istighfar', 'الاستغفار')}
+          </button>
+          <button
+            type="button"
+            onClick={onOpenQuran}
+            className="rounded-2xl border border-[var(--card-line)] px-3 py-3 text-sm font-medium text-[var(--ink-dim)] transition active:bg-white/8 active:text-[var(--ink)]"
+          >
+            {text('Qur’an', 'القرآن')}
+          </button>
+        </div>
+        <p className="mt-2 text-[11px] text-[var(--ink-faint)]">
+          {text('These two pages remain available offline after the app has been opened once.', 'يبقى هذان القسمان متاحين دون اتصال بعد فتح التطبيق مرة واحدة.')}
+        </p>
 
         {error && <p className="mt-4 text-sm leading-relaxed text-[var(--accent)]">{error}</p>}
 

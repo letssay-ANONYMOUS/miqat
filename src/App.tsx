@@ -272,8 +272,6 @@ export default function App() {
     language,
   ]);
 
-  if (!place || !days || !next) return <Onboarding />;
-
   if (devotionsOpen) {
     return (
       <div lang={language} dir={isArabic ? 'rtl' : 'ltr'} className="min-h-dvh bg-[var(--sky-bottom)]">
@@ -287,6 +285,34 @@ export default function App() {
           }}
         />
       </div>
+    );
+  }
+
+  // The two devotional resources are useful without a location. Keep them
+  // reachable from a fresh offline launch instead of gating them behind the
+  // prayer-time onboarding flow.
+  if (!place && page === 'quran') {
+    return (
+      <div lang={language} dir={isArabic ? 'rtl' : 'ltr'} className="min-h-dvh bg-[var(--sky-bottom)]">
+        <OfflineQuranShell
+          onBack={() => setPage('times')}
+          onOpenDevotions={() => setDevotionsOpen(true)}
+          onChangePage={setPage}
+          openRequest={quranRequest}
+        />
+      </div>
+    );
+  }
+
+  if (!place || !days || !next) {
+    return (
+      <Onboarding
+        onOpenDevotions={() => setDevotionsOpen(true)}
+        onOpenQuran={() => {
+          void preloadPage('quran');
+          setPage('quran');
+        }}
+      />
     );
   }
 
@@ -511,6 +537,63 @@ export default function App() {
         <Suspense fallback={null}><VerifySheet open onClose={() => setSheet(null)} /></Suspense>
       )}
       <TabBar page={page} onIntent={(nextPage) => void preloadPage(nextPage)} onChange={setPage} />
+    </div>
+  );
+}
+
+function OfflineQuranShell({
+  onBack,
+  onOpenDevotions,
+  onChangePage,
+  openRequest,
+}: {
+  onBack: () => void;
+  onOpenDevotions: () => void;
+  onChangePage: (page: Page) => void;
+  openRequest: { surah: number; token: number } | null;
+}) {
+  const { text } = useI18n();
+  const [reading, setReading] = useState(false);
+
+  return (
+    <div className={reading ? 'mushaf-root' : 'sky relative min-h-dvh overflow-hidden'}>
+      <div className={reading ? 'relative z-10 w-full' : 'relative z-10 mx-auto flex min-h-dvh w-full max-w-2xl flex-col px-4 page-bottom-space pt-[max(0.75rem,env(safe-area-inset-top))] sm:px-5'}>
+        {!reading && (
+          <header className="flex items-center justify-between gap-3 py-2">
+            <button
+              type="button"
+              onClick={onBack}
+              className="rounded-2xl px-3 py-2 text-sm text-[var(--ink-dim)] transition active:bg-white/10"
+            >
+              {text('Back', 'رجوع')}
+            </button>
+            <div className="text-center">
+              <p className="text-sm font-semibold">{text('Offline library', 'المكتبة دون اتصال')}</p>
+              <p className="text-[11px] text-[var(--ink-faint)]">{text('Qur’an and Istighfar are available on this device', 'القرآن والاستغفار متاحان على هذا الجهاز')}</p>
+            </div>
+            <button
+              type="button"
+              onClick={onOpenDevotions}
+              className="rounded-2xl px-3 py-2 text-sm text-[var(--ink-dim)] transition active:bg-white/10"
+            >
+              {text('Istighfar', 'الاستغفار')}
+            </button>
+          </header>
+        )}
+        <section className={reading ? '' : 'flex-1 py-2'}>
+          <Suspense fallback={<PageFallback />}>
+            <QuranPage onReading={setReading} openRequest={openRequest} />
+          </Suspense>
+        </section>
+      </div>
+
+      {!reading && (
+        <TabBar
+          page="quran"
+          onIntent={(page) => void preloadPage(page)}
+          onChange={onChangePage}
+        />
+      )}
     </div>
   );
 }
