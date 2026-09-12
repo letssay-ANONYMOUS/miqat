@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && tsc --noEmit -p tsconfig.api.json && node scripts/build-functions.mjs && vite build",
+    "build": "tsc -b && tsc --noEmit -p tsconfig.api.json && node scripts/build-functions.mjs && vite build && node scripts/build-service-worker.mjs",
     "preview": "vite preview",
     "typecheck": "tsc -b && tsc --noEmit -p tsconfig.api.json",
     "verify": "vite build --ssr scripts/verify.ts --outDir .tmp-verify --logLevel error && node .tmp-verify/verify.js",
