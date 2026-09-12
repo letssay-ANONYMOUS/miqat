@@ -244,7 +244,7 @@ function DhikrCounter() {
     sessionRef.current = next;
     pending.current += 1;
     setSession(next);
-    if (!isIOS) haptic('tick');
+    haptic('tick');
     if (flushTimer.current) clearTimeout(flushTimer.current);
     flushTimer.current = setTimeout(flush, 450);
   };
@@ -418,13 +418,10 @@ function CounterButton({ phrase, onPress, locked = false }: { phrase: string; on
   const { text } = useI18n();
   const nativeSwitch = useRef<HTMLInputElement>(null);
   const visual = useRef<HTMLElement | null>(null);
-  const pointer = useRef<number | null>(null);
-  const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pointer = useRef<{ id: number; x: number; y: number; moved: boolean } | null>(null);
   const counted = useRef(false);
+  const MOVE_THRESHOLD = 12;
   useEffect(() => { nativeSwitch.current?.setAttribute('switch', ''); }, []);
-  useEffect(() => () => {
-    if (holdTimer.current) clearTimeout(holdTimer.current);
-  }, []);
 
   const countOnce = () => {
     if (counted.current) return;
@@ -434,25 +431,27 @@ function CounterButton({ phrase, onPress, locked = false }: { phrase: string; on
 
   const startPress = (event: React.PointerEvent<HTMLElement>) => {
     if (!event.isPrimary || event.button !== 0) return;
-    if (holdTimer.current) clearTimeout(holdTimer.current);
-    pointer.current = event.pointerId;
+    pointer.current = { id: event.pointerId, x: event.clientX, y: event.clientY, moved: false };
     counted.current = false;
     visual.current?.classList.add('is-pressing');
-    visual.current?.classList.remove('is-deep');
     try { event.currentTarget.setPointerCapture(event.pointerId); } catch { /* WebKit may own the native switch capture. */ }
-    holdTimer.current = setTimeout(() => {
-      visual.current?.classList.add('is-deep');
-      countOnce();
-    }, 380);
+  };
+
+  const movePress = (event: React.PointerEvent<HTMLElement>) => {
+    const active = pointer.current;
+    if (!active || active.id !== event.pointerId || active.moved) return;
+    const distance = Math.hypot(event.clientX - active.x, event.clientY - active.y);
+    if (distance <= MOVE_THRESHOLD) return;
+    active.moved = true;
+    visual.current?.classList.remove('is-pressing');
   };
 
   const finishPress = (event: React.PointerEvent<HTMLElement>, cancelled = false) => {
-    if (pointer.current !== event.pointerId) return;
-    if (holdTimer.current) clearTimeout(holdTimer.current);
-    holdTimer.current = null;
+    const active = pointer.current;
+    if (!active || active.id !== event.pointerId) return;
     pointer.current = null;
-    if (!cancelled) countOnce();
-    visual.current?.classList.remove('is-pressing', 'is-deep');
+    if (!cancelled && !active.moved) countOnce();
+    visual.current?.classList.remove('is-pressing');
     try {
       if (event.currentTarget.hasPointerCapture(event.pointerId)) {
         event.currentTarget.releasePointerCapture(event.pointerId);
@@ -462,6 +461,7 @@ function CounterButton({ phrase, onPress, locked = false }: { phrase: string; on
 
   const pointerProps = {
     onPointerDown: startPress,
+    onPointerMove: movePress,
     onPointerUp: (event: React.PointerEvent<HTMLElement>) => finishPress(event),
     onPointerCancel: (event: React.PointerEvent<HTMLElement>) => finishPress(event, true),
     onContextMenu: (event: React.MouseEvent<HTMLElement>) => event.preventDefault(),
