@@ -1,4 +1,5 @@
 import {
+  Fragment,
   useEffect,
   useLayoutEffect,
   useRef,
@@ -86,15 +87,18 @@ const TABS: { id: Page; label: string; labelAr: string; icon: ReactNode }[] = [
  * return to the top.
  */
 const TOP = 24;
+const NAV_ITEM_COUNT = TABS.length + 1;
 
 export function TabBar({
   page,
   onChange,
   onIntent,
+  onOpenDevotions,
 }: {
   page: Page;
   onChange: (page: Page) => void;
   onIntent?: (page: Page) => void;
+  onOpenDevotions: () => void;
 }) {
   const { isArabic, text } = useI18n();
   const rail = useRef<HTMLDivElement>(null);
@@ -146,7 +150,7 @@ export function TabBar({
       const inner = Math.max(0, open - pad);
       setOpenW(open);
       setInnerW(inner);
-      setShutW(pad + inner / TABS.length);
+      setShutW(pad + inner / NAV_ITEM_COUNT);
     };
     measure();
     const observer = new ResizeObserver(measure);
@@ -180,8 +184,20 @@ export function TabBar({
     onChange(id);
   };
 
+  const openDevotions = () => {
+    if (collapsed) {
+      expand();
+      return;
+    }
+    haptic('tick');
+    onOpenDevotions();
+  };
+
   const width = collapsed ? shutW || undefined : openW || undefined;
-  const gestures = useBarGesture(bar, (node) => select(node.dataset.tab as Page), collapsed);
+  const gestures = useBarGesture(bar, (node) => {
+    if (node.dataset.action === 'devotions') openDevotions();
+    else select(node.dataset.tab as Page);
+  }, collapsed);
 
   return (
     <nav className="tabbar-dock" dir="ltr">
@@ -223,8 +239,8 @@ export function TabBar({
               />
             )}
             {TABS.map((tab, i) => (
-              <button
-                key={tab.id}
+              <Fragment key={tab.id}>
+                <button
                 ref={(node) => {
                   if (node) items.current.set(tab.id, node);
                   else items.current.delete(tab.id);
@@ -244,7 +260,7 @@ export function TabBar({
                 onFocus={() => onIntent?.(tab.id)}
                 onClick={() => select(tab.id)}
                 className={`tabbar-item ${page === tab.id ? 'text-[var(--ink)]' : 'text-[var(--ink-dim)]'}`}
-                style={{ '--i': i } as CSSProperties}
+                style={{ '--i': tab.id === 'times' ? 0 : i + 1 } as CSSProperties}
               >
                 <svg width="22" height="22" viewBox="0 0 22 22" fill="none" aria-hidden="true">
                   {tab.icon}
@@ -252,7 +268,30 @@ export function TabBar({
                 <span className="text-[10px] font-medium tracking-wide">
                   {isArabic ? tab.labelAr : tab.label}
                 </span>
-              </button>
+                </button>
+                {tab.id === 'times' && (
+                  <button
+                    type="button"
+                    data-action="devotions"
+                    aria-hidden={collapsed}
+                    tabIndex={collapsed ? -1 : undefined}
+                    aria-label={text('Open Istighfar and daily rituals', 'فتح الاستغفار والأذكار اليومية')}
+                    onClick={openDevotions}
+                    className="tabbar-item tabbar-devotions"
+                    style={{ '--i': 1 } as CSSProperties}
+                  >
+                    <svg width="22" height="22" viewBox="0 0 22 22" fill="none" aria-hidden="true">
+                      <circle cx="7" cy="7" r="2" stroke="currentColor" strokeWidth="1.55" />
+                      <circle cx="15" cy="7" r="2" stroke="currentColor" strokeWidth="1.55" />
+                      <circle cx="11" cy="14.5" r="2" stroke="currentColor" strokeWidth="1.55" />
+                      <path d="M8.7 8.1l1.4 4.2M13.3 8.1l-1.4 4.2M9.2 15.8l-2.4 1.5" stroke="currentColor" strokeWidth="1.45" strokeLinecap="round" />
+                    </svg>
+                    <span className="text-[10px] font-semibold tracking-wide">
+                      {text('Istighfar', 'استغفار')}
+                    </span>
+                  </button>
+                )}
+              </Fragment>
             ))}
           </div>
         </div>

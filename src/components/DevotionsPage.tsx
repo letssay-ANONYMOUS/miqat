@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { Segmented } from './Segmented';
 import { haptic, isIOS } from '../lib/feel';
 import { useI18n } from '../lib/i18n';
@@ -135,6 +135,29 @@ function countFor(counts: DhikrCounts | undefined, kind: DhikrKind): number {
   return counts?.[kind] ?? 0;
 }
 
+interface SessionSignal {
+  value: number;
+  listeners: Set<() => void>;
+}
+
+function setSessionValue(signal: SessionSignal, value: number) {
+  if (signal.value === value) return;
+  signal.value = value;
+  signal.listeners.forEach((listener) => listener());
+}
+
+function SessionNumber({ signal, locale, className }: { signal: SessionSignal; locale: string; className: string }) {
+  const subscribe = useCallback((listener: () => void) => {
+    signal.listeners.add(listener);
+    return () => {
+      signal.listeners.delete(listener);
+    };
+  }, [signal]);
+  const getSnapshot = useCallback(() => signal.value, [signal]);
+  const value = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+  return <p className={className}>{value.toLocaleString(locale)}</p>;
+}
+
 export function DevotionsPage({
   onClose,
   onOpenMulk,
@@ -187,10 +210,13 @@ export function DevotionsPage({
 
 function DhikrCounter() {
   const { language, isArabic, locale, text } = useI18n();
-  const { dhikrHistory, recordDhikr, resetDhikr } = useStore();
+  const dhikrHistory = useStore((state) => state.dhikrHistory);
+  const recordDhikr = useStore((state) => state.recordDhikr);
+  const resetDhikr = useStore((state) => state.resetDhikr);
   const [kind, setKind] = useState<DhikrKind>('istighfar');
-  const [session, setSession] = useState(0);
-  const sessionRef = useRef(0);
+  const sessionSignalRef = useRef<SessionSignal | null>(null);
+  if (!sessionSignalRef.current) sessionSignalRef.current = { value: 0, listeners: new Set() };
+  const sessionSignal = sessionSignalRef.current;
   const [focusLocked, setFocusLocked] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
   const [unlocking, setUnlocking] = useState(false);
@@ -240,10 +266,9 @@ function DhikrCounter() {
   }, [focusLocked]);
 
   const increment = () => {
-    const next = sessionRef.current + 1;
-    sessionRef.current = next;
+    const next = sessionSignal.value + 1;
     pending.current += 1;
-    setSession(next);
+    setSessionValue(sessionSignal, next);
     haptic('tick');
     if (flushTimer.current) clearTimeout(flushTimer.current);
     flushTimer.current = setTimeout(flush, 450);
@@ -252,16 +277,14 @@ function DhikrCounter() {
   const chooseKind = (next: DhikrKind) => {
     flush();
     setKind(next);
-    sessionRef.current = 0;
-    setSession(0);
+    setSessionValue(sessionSignal, 0);
     haptic('soft');
   };
 
   const confirmReset = () => {
     flush();
     resetDhikr(today, kind);
-    sessionRef.current = 0;
-    setSession(0);
+    setSessionValue(sessionSignal, 0);
     setResetOpen(false);
     haptic('lock');
   };
@@ -293,7 +316,7 @@ function DhikrCounter() {
       year: sum(365),
       all: Object.values(dhikrHistory).reduce((total, counts) => total + countFor(counts, kind), 0) + pending.current,
     };
-  }, [dhikrHistory, kind, session]);
+  }, [dhikrHistory, kind]);
 
   const week = useMemo(() => Array.from({ length: 7 }, (_, i) => {
     const key = shiftedDay(i - 6);
@@ -302,7 +325,7 @@ function DhikrCounter() {
       value: countFor(dhikrHistory[key], kind) + (key === today ? pending.current : 0),
       label: new Intl.DateTimeFormat(locale, { weekday: 'narrow' }).format(new Date(`${key}T12:00:00`)),
     };
-  }), [dhikrHistory, kind, locale, session, today]);
+  }), [dhikrHistory, kind, locale, today]);
   const maxWeek = Math.max(1, ...week.map((day) => day.value));
 
   if (focusLocked) {
@@ -310,7 +333,7 @@ function DhikrCounter() {
       <div className="focus-lock fixed inset-0 z-50 flex min-h-dvh flex-col items-center justify-center px-6 text-center">
         <p className="text-[11px] uppercase tracking-[0.18em] text-white/45">{text('Focus lock', 'وضع التركيز')}</p>
         <p className="mt-2 text-sm text-white/65">{isArabic ? phrase.ar : phrase.en}</p>
-        <p className="tabular mt-4 text-6xl font-light text-white">{session}</p>
+        <SessionNumber signal={sessionSignal} locale={locale} className="tabular mt-4 text-6xl font-light text-white" />
         <CounterButton phrase={isArabic ? phrase.ar : phrase.en} onPress={increment} locked />
         <p className="mt-7 max-w-xs text-xs leading-relaxed text-white/45">
           {text('Only the counter is active. Navigation and other controls are protected from accidental touches.', 'العداد وحده نشط. التنقل وبقية الأزرار محمية من اللمسات العرضية.')}
@@ -348,7 +371,7 @@ function DhikrCounter() {
 
       <div className="mt-8 text-center">
         <p className="text-[11px] uppercase tracking-[0.18em] text-[var(--ink-faint)]">{text('This session', 'هذه الجلسة')}</p>
-        <p className="tabular mt-2 text-6xl font-light tracking-tight">{session.toLocaleString(locale)}</p>
+        <SessionNumber signal={sessionSignal} locale={locale} className="tabular mt-2 text-6xl font-light tracking-tight" />
         <p className="mt-2 text-sm text-[var(--ink-dim)]">{isArabic ? phrase.ar : phrase.en}</p>
       </div>
 
@@ -388,14 +411,14 @@ function DhikrCounter() {
         {text('Focus lock keeps only the counter active and asks for a long press to leave.', 'وضع التركيز يُبقي العداد وحده نشطًا ويتطلب ضغطة مطولة للخروج.')}
       </p>
 
-      <div className="mt-8 grid grid-cols-2 gap-px overflow-hidden rounded-3xl border border-[var(--card-line)] bg-[var(--card-line)]">
+      <div className="devotion-history mt-8 grid grid-cols-2 gap-px overflow-hidden rounded-3xl border border-[var(--card-line)] bg-[var(--card-line)]">
         <Metric label={text('Today', 'اليوم')} value={todayTotal} locale={locale} />
         <Metric label={text('Past 7 days', 'آخر 7 أيام')} value={totals.week} locale={locale} />
         <Metric label={text('Past 30 days', 'آخر 30 يومًا')} value={totals.month} locale={locale} />
         <Metric label={text('Past year', 'آخر سنة')} value={totals.year} locale={locale} />
       </div>
 
-      <div className="card mt-3 rounded-3xl px-5 py-5">
+      <div className="devotion-history card mt-3 rounded-3xl px-5 py-5">
         <div className="flex items-baseline justify-between gap-3">
           <h2 className="text-sm font-semibold">{text('Seven-day rhythm', 'إيقاع سبعة أيام')}</h2>
           <span className="tabular text-xs text-[var(--ink-faint)]">{text('All time', 'الإجمالي')} {totals.all.toLocaleString(locale)}</span>
@@ -418,10 +441,21 @@ function CounterButton({ phrase, onPress, locked = false }: { phrase: string; on
   const { text } = useI18n();
   const nativeSwitch = useRef<HTMLInputElement>(null);
   const visual = useRef<HTMLElement | null>(null);
-  const pointer = useRef<{ id: number; x: number; y: number; moved: boolean } | null>(null);
+  const pointer = useRef<{ id: number; x: number; y: number; moved: boolean; startedAt: number } | null>(null);
+  const releaseTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const counted = useRef(false);
   const MOVE_THRESHOLD = 12;
+  const QUICK_PRESS_MS = 260;
+  const MIN_MOTION_MS = 230;
   useEffect(() => { nativeSwitch.current?.setAttribute('switch', ''); }, []);
+  useEffect(() => () => {
+    if (releaseTimer.current) clearTimeout(releaseTimer.current);
+  }, []);
+
+  const clearMotion = () => {
+    visual.current?.classList.remove('is-pressing', 'is-quick-release');
+    releaseTimer.current = null;
+  };
 
   const countOnce = () => {
     if (counted.current) return;
@@ -431,7 +465,16 @@ function CounterButton({ phrase, onPress, locked = false }: { phrase: string; on
 
   const startPress = (event: React.PointerEvent<HTMLElement>) => {
     if (!event.isPrimary || event.button !== 0) return;
-    pointer.current = { id: event.pointerId, x: event.clientX, y: event.clientY, moved: false };
+    if (releaseTimer.current) clearTimeout(releaseTimer.current);
+    releaseTimer.current = null;
+    visual.current?.classList.remove('is-quick-release');
+    pointer.current = {
+      id: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+      moved: false,
+      startedAt: performance.now(),
+    };
     counted.current = false;
     visual.current?.classList.add('is-pressing');
     try { event.currentTarget.setPointerCapture(event.pointerId); } catch { /* WebKit may own the native switch capture. */ }
@@ -443,15 +486,26 @@ function CounterButton({ phrase, onPress, locked = false }: { phrase: string; on
     const distance = Math.hypot(event.clientX - active.x, event.clientY - active.y);
     if (distance <= MOVE_THRESHOLD) return;
     active.moved = true;
-    visual.current?.classList.remove('is-pressing');
+    clearMotion();
   };
 
   const finishPress = (event: React.PointerEvent<HTMLElement>, cancelled = false) => {
     const active = pointer.current;
     if (!active || active.id !== event.pointerId) return;
     pointer.current = null;
-    if (!cancelled && !active.moved) countOnce();
-    visual.current?.classList.remove('is-pressing');
+    if (!cancelled && !active.moved) {
+      countOnce();
+      const elapsed = performance.now() - active.startedAt;
+      if (elapsed < QUICK_PRESS_MS) {
+        visual.current?.classList.remove('is-pressing');
+        visual.current?.classList.add('is-quick-release');
+        releaseTimer.current = setTimeout(clearMotion, Math.max(90, MIN_MOTION_MS - elapsed));
+      } else {
+        clearMotion();
+      }
+    } else {
+      clearMotion();
+    }
     try {
       if (event.currentTarget.hasPointerCapture(event.pointerId)) {
         event.currentTarget.releasePointerCapture(event.pointerId);

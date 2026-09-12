@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { readdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { readdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 const root = path.resolve('dist');
@@ -28,7 +28,13 @@ for (const file of files) {
   digest.update(await readFile(file.absolute));
 }
 const version = digest.digest('hex').slice(0, 16);
-const urls = ['/', ...files.map((file) => file.relative), '/sw.js'];
+const essentialFiles = files.filter(({ relative }) =>
+  relative === '/index.html' ||
+  relative === '/manifest.webmanifest' ||
+  /^\/(?:apple-touch-icon(?:-[^/]+)?\.png|favicon-32\.png|icon(?:-\d+)?\.(?:png|svg))$/.test(relative) ||
+  /^\/assets\/(?:index-|QuranPage-|quran-)/.test(relative),
+);
+const urls = ['/', ...essentialFiles.map((file) => file.relative), '/sw.js'];
 
 const source = `const CACHE_NAME = 'miqat-offline-${version}';
 const PRECACHE_URLS = ${JSON.stringify([...new Set(urls)], null, 2)};
@@ -86,4 +92,4 @@ self.addEventListener('fetch', (event) => {
 `;
 
 await writeFile(path.join(root, 'sw.js'), source);
-console.log(`Generated dist/sw.js with ${files.length} precached assets (${version})`);
+console.log(`Generated dist/sw.js with ${essentialFiles.length} essential precached assets (${version})`);

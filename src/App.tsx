@@ -96,34 +96,6 @@ export default function App() {
   }, [page, devotionsOpen, quranReading, settings.lockScreenEnabled]);
 
   useEffect(() => {
-    if (devotionsOpen) return;
-    let cancelled = false;
-    let nextTimer = 0;
-    const loaders = [loadQiblaPage, loadQuranPage, loadMonthPage, loadSettingsPage, loadVerifySheet];
-    nextTimer = window.setTimeout(async () => {
-      for (const load of loaders) {
-        if (cancelled) return;
-        await load().catch(() => undefined);
-        if (cancelled) return;
-        await new Promise<void>((resolve) => {
-          nextTimer = window.setTimeout(resolve, 320);
-        });
-      }
-      const connection = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection;
-      if (!cancelled && !connection?.saveData) {
-        await new Promise<void>((resolve) => {
-          nextTimer = window.setTimeout(resolve, 3_000);
-        });
-        if (!cancelled) await loadQuranData().catch(() => undefined);
-      }
-    }, 900);
-    return () => {
-      cancelled = true;
-      window.clearTimeout(nextTimer);
-    };
-  }, [devotionsOpen]);
-
-  useEffect(() => {
     document.documentElement.lang = language;
     document.documentElement.dir = isArabic ? 'rtl' : 'ltr';
     if (!place) document.title = text('Miqāt — Prayer Times', 'ميقات — مواقيت الصلاة');
@@ -536,7 +508,12 @@ export default function App() {
       {sheet === 'verify' && (
         <Suspense fallback={null}><VerifySheet open onClose={() => setSheet(null)} /></Suspense>
       )}
-      <TabBar page={page} onIntent={(nextPage) => void preloadPage(nextPage)} onChange={setPage} />
+      <TabBar
+        page={page}
+        onIntent={(nextPage) => void preloadPage(nextPage)}
+        onChange={setPage}
+        onOpenDevotions={() => setDevotionsOpen(true)}
+      />
     </div>
   );
 }
@@ -592,6 +569,7 @@ function OfflineQuranShell({
           page="quran"
           onIntent={(page) => void preloadPage(page)}
           onChange={onChangePage}
+          onOpenDevotions={onOpenDevotions}
         />
       )}
     </div>

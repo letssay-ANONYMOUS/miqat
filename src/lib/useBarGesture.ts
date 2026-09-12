@@ -9,7 +9,7 @@ export function useBarGesture(ref: RefObject<HTMLDivElement | null>, select: (el
   const nearest = (x: number): HTMLElement | null => {
     let best: HTMLElement | null = null;
     let distance = Infinity;
-    ref.current?.querySelectorAll<HTMLElement>('[role="tab"]').forEach((node) => {
+    ref.current?.querySelectorAll<HTMLElement>('.tabbar-item').forEach((node) => {
       const box = node.getBoundingClientRect();
       const d = Math.abs(x - box.left - box.width / 2);
       if (d < distance) { distance = d; best = node; }
