@@ -3,11 +3,69 @@
 A web app that computes prayer times on the device, from the sun's position, with every
 parameter that decides a minute exposed and checkable.
 
+**Live:** <https://miqat-sepia.vercel.app> · **Status:** active, deployed · React + TypeScript · installable PWA
+
 ```bash
-npm --prefix miqat install
-npm --prefix miqat run dev      # http://localhost:5183
-npm --prefix miqat run verify   # accuracy regression against official timetables
+git clone https://github.com/letssay-ANONYMOUS/miqat.git
+cd miqat
+npm install
+npm run dev        # http://localhost:5183
+npm run verify     # accuracy regression against the official timetables
 ```
+
+No API key is needed to run the app. Every service it talks to is keyless, and prayer times
+are never fetched — the network is only used to find *where* you are. The environment
+variables in [Environment](#environment) are for the optional usage-reporting endpoints only.
+
+## Screens
+
+| The board | The day | The month |
+| --- | --- | --- |
+| ![Countdown to the next prayer over a sky tinted by the real sun](docs/screenshots/board.png) | ![The six prayers with what each one actually marks](docs/screenshots/times.png) | ![September 2026 for Dubai, served from the Awqaf table](docs/screenshots/month.png) |
+
+Dubai, 16 September 2026. The background is not a gradient someone picked — `lib/sun.ts`
+computes the sun's altitude for your coordinates and `lib/sky.ts` turns that into the colour,
+so the page is dark here because the sun is actually down.
+
+## Architecture
+
+```mermaid
+flowchart TB
+    subgraph device["Browser · everything that decides a prayer time runs here"]
+        UI["React 19 + Zustand<br/>sky, board, Qibla, mushaf"]
+        ENGINE["lib/prayer.ts<br/>adhan-js · Meeus equations<br/>+ elevation &amp; rounding"]
+        TABLE["lib/officialTimetable.ts<br/>Awqaf table, shipped in the bundle"]
+        SW["service worker<br/>offline app shell"]
+        UI --> ENGINE
+        ENGINE -->|"covered date?"| TABLE
+    end
+
+    subgraph edge["Vercel Edge Functions"]
+        TRACK["/api/track<br/>the only write path"]
+        AUDIT["/api/audit<br/>daily accuracy cron"]
+        FORGET["/api/forget<br/>erasure"]
+    end
+
+    subgraph ext["Keyless third parties"]
+        GEO["Open-Meteo geocoding<br/>BigDataCloud reverse"]
+        ALAD["AlAdhan API<br/>independent cross-check"]
+    end
+
+    DB[("Supabase Postgres<br/>RLS on, no policies<br/>one definer function")]
+
+    UI -.->|"where am I"| GEO
+    UI -.->|"check the maths"| ALAD
+    UI --> TRACK --> DB
+    UI --> FORGET --> DB
+    AUDIT -->|"recompute + diff"| DB
+    GN["Gulf News<br/>Awqaf republisher"] --> AUDIT
+```
+
+Two things are deliberate in that picture. **No arrow carries a prayer time into the
+browser** — the times are computed or read from a table already in the bundle, so the app
+works with the radio off. And **nothing writes to the database from the client**: the
+publishable key and a shared secret live only in the Edge Function, so the shipped bundle
+carries no database credential at all.
 
 ## What the research turned up
 
@@ -61,19 +119,45 @@ official Awqaf timetable for Dubai:
 | **This app** (`sunrise −3, dhuhr +3, asr +1, maghrib +3`) | 29/31 exact | 18/31 exact |
 
 The regression then widened to all seven emirates plus Al Ain, eight months of 2026, from an
-independent publisher of the same official table — **11,634 published times**:
+independent publisher of the same official table — **11,616 published times**:
 
 ```
-Dubai            241 days · worst 1 min · 100.0% within a minute
-Abu Dhabi        243 days · worst 2 min ·  99.9% within a minute
-Sharjah          242 days · worst 2 min ·  99.9% within a minute
-Ajman            243 days · worst 2 min ·  99.9% within a minute
-Fujairah         243 days · worst 3 min ·  99.9% within a minute
-Ras Al Khaimah   242 days · worst 2 min ·  99.4% within a minute
-Umm Al Quwain    241 days · worst 2 min ·  98.3% within a minute
-Al Ain           241 days · worst 1 min · 100.0% within a minute
-                                           99.7% overall
+UAE · Awqaf via Gulf News · computed from the sun · tolerance 3 min
+  Dubai            241 days · worst 1 min · 100.0% within a minute
+  Abu Dhabi        243 days · worst 1 min · 100.0% within a minute
+  Sharjah          242 days · worst 1 min · 100.0% within a minute
+  Ajman            243 days · worst 2 min ·  99.9% within a minute
+  Fujairah         243 days · worst 3 min ·  99.9% within a minute
+  Ras Al Khaimah   242 days · worst 2 min ·  99.9% within a minute
+  Umm Al Quwain    241 days · worst 1 min · 100.0% within a minute
+  Al Ain           241 days · worst 1 min · 100.0% within a minute
+  ──────────────────────────────────────────────────────────
+  100.0% of 11616 checks within a minute (needs 99%)
+       fajr     worst  1 min · exact on 91%
+       sunrise  worst  2 min · exact on 91%
+       dhuhr    worst  3 min · exact on 98%
+       asr      worst  1 min · exact on 62%
+       maghrib  worst  2 min · exact on 90%
+       isha     worst  1 min · exact on 89%
 ```
+
+### The pass that nearly stopped testing anything
+
+Once the shipped timetable landed (below), `computeDay` began returning Awqaf's published
+row verbatim for exactly the dates this suite covers — so the suite was diffing the table
+against the table it was built from and printing a flawless zero. A perfect score that
+cannot fail is worse than no test.
+
+The suite now runs the engine with the lookup path switched off, which is the number above,
+and then runs a **second** pass with it on, where an exact match is the actual requirement:
+
+```
+UAE · Awqaf via Gulf News · shipped timetable · tolerance 0 min
+  all 8 cities · worst 0 min · 100.0% of 11616 checks exact
+```
+
+Two different claims, measured separately: the astronomy is within a minute of the
+authority, and the build pipeline copied the authority's table without corrupting it.
 
 ### The terrain correction, and why Al Ain caught it
 
@@ -207,6 +291,32 @@ Supabase directly writes nothing.
 RLS is on with no policies, so even the anon key cannot read or write the tables; everything goes
 through one definer function. No visitor can ever read another's location. Read your own data
 from the `miqat_dashboard` view in the Supabase SQL editor.
+
+## Environment
+
+Nothing here is needed to run, build or verify the app — clone it and `npm run dev` works.
+These exist only for the usage-reporting and audit endpoints under `api/`, and in production
+Vercel injects them.
+
+```bash
+cp .env.example .env.local
+```
+
+| Variable | Required for | Notes |
+| --- | --- | --- |
+| `SUPABASE_URL` | `/api/track`, `/api/audit`, `/api/forget` | Project URL. |
+| `SUPABASE_ANON_KEY` | the same | Publishable key. RLS is on with no policies, so it reads and writes nothing on its own. |
+| `MIQAT_SERVER_SECRET` | the same | Shared secret the definer function checks. Server-side only — it must never reach the bundle. |
+| `MIQAT_IP_SALT` | `/api/track` | Salts the IP hash used for rate limiting. Raw IPs are never stored. |
+| `CRON_SECRET` | `/api/audit` | Guards the write-and-record run of the daily audit. |
+| `ALERT_WEBHOOK_URL` | `/api/audit` | Optional. Where drift is reported. |
+
+## Deployment
+
+Vercel. `npm run build` typechecks the app and the Edge Functions, compiles `functions/` into
+`api/`, builds the client, then generates the service worker with a content-hashed precache
+manifest. `vercel.json` carries the SPA rewrite, immutable caching for hashed assets, and the
+cron entry that calls `/api/audit` once a day.
 
 ## Layout
 
