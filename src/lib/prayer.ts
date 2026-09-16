@@ -194,6 +194,12 @@ export function computeDay(
   settings: Settings,
   /** Fractional-minute trim on top of the method, for fitting experiments. */
   trim?: Partial<Record<PrayerKey, number>>,
+  /**
+   * Set false to force the astronomy even where a published table exists. The
+   * app never does; the regression suite does, because comparing the shipped
+   * table against the table it was built from proves nothing about the maths.
+   */
+  useOfficialTimetable = true,
 ): DayTimes {
   const coords = new Coordinates(latitude, longitude);
   const params = buildParams(settings, coords);
@@ -228,7 +234,10 @@ export function computeDay(
    * recomputing all of that can only introduce ways to differ from the mosque.
    * The user's own corrections still apply on top.
    */
-  const official = settings.method === 'Dubai' ? officialTimes(latitude, longitude, date) : null;
+  const official =
+    useOfficialTimetable && settings.method === 'Dubai'
+      ? officialTimes(latitude, longitude, date)
+      : null;
   const times = official
     ? (Object.fromEntries(
         PRAYER_ORDER.map((key) => [

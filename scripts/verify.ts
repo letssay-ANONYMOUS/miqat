@@ -10,6 +10,12 @@
  * counterpart in a published table, so leaving it in would only blur what is
  * being tested — the convention itself.
  *
+ * The shipped timetable is bypassed here. The app serves Awqaf's published
+ * table verbatim where it has one, so leaving that path in would compare the
+ * table against the table it was built from and report a perfect score that
+ * says nothing about the astronomy. The second pass checks that lookup path
+ * separately, where an exact match is the whole point.
+ *
  *   npm run verify
  */
 import uae from '../reference/uae-awqaf-2026.json';
@@ -91,7 +97,14 @@ function minutesOfDay(hhmm: string): number {
 
 let failed = false;
 
-for (const suite of SUITES) {
+/**
+ * 'engine'    recompute every day from the sun and diff against the publisher.
+ * 'timetable' serve the shipped table and diff against the publisher, which
+ *             checks the build pipeline copied it faithfully.
+ */
+type Mode = 'engine' | 'timetable';
+
+function run(suite: Suite, mode: Mode) {
   const format = new Intl.DateTimeFormat('en-GB', {
     timeZone: suite.timezone,
     hour: '2-digit',
@@ -108,9 +121,12 @@ for (const suite of SUITES) {
     useElevation: false,
   };
 
-  console.log(`\n${suite.label} · tolerance ${suite.tolerance} min`);
+  const tolerance = mode === 'timetable' ? 0 : suite.tolerance;
+  const floor = mode === 'timetable' ? 1 : suite.minWithinOneMinute;
+
+  console.log(`\n${suite.label} · ${LABEL[mode]} · tolerance ${tolerance} min`);
   console.log(`  ${suite.source}`);
-  if (suite.note) console.log(`  ${suite.note}`);
+  if (mode === 'engine' && suite.note) console.log(`  ${suite.note}`);
 
   const overall: Record<PrayerKey, number[]> = {
     fajr: [], sunrise: [], dhuhr: [], asr: [], maghrib: [], isha: [],
@@ -124,7 +140,14 @@ for (const suite of SUITES) {
     for (const { month, days } of station.months) {
       for (const row of days) {
         const anchor = new Date(suite.year, month - 1, row.day, 12);
-        const computed = computeDay(station.latitude, station.longitude, anchor, settings);
+        const computed = computeDay(
+          station.latitude,
+          station.longitude,
+          anchor,
+          settings,
+          undefined,
+          mode === 'timetable',
+        );
         for (const key of PRAYER_ORDER) {
           const delta = minutesOfDay(format.format(computed.times[key])) - minutesOfDay(row[key]);
           deltas[key].push(delta);
@@ -137,9 +160,9 @@ for (const suite of SUITES) {
     const total = deltas.fajr.length;
     const within1 = PRAYER_ORDER.flatMap((k) => deltas[k]).filter((d) => Math.abs(d) <= 1).length;
     const checks = total * PRAYER_ORDER.length;
-    if (worst > suite.tolerance) failed = true;
+    if (worst > tolerance) failed = true;
     console.log(
-      `  ${worst > suite.tolerance ? 'FAIL' : 'ok  '} ${station.city.padEnd(16)} ` +
+      `  ${worst > tolerance ? 'FAIL' : 'ok  '} ${station.city.padEnd(16)} ` +
         `${String(total).padStart(3)} days · worst ${worst} min · ` +
         `${((within1 / checks) * 100).toFixed(1)}% within a minute`,
     );
@@ -147,13 +170,13 @@ for (const suite of SUITES) {
 
   const allChecks = PRAYER_ORDER.flatMap((k) => overall[k]);
   const withinOne = allChecks.filter((d) => Math.abs(d) <= 1).length / allChecks.length;
-  if (withinOne < suite.minWithinOneMinute) failed = true;
+  if (withinOne < floor) failed = true;
 
   console.log('  ' + '─'.repeat(58));
   console.log(
     `  ${withinOne < suite.minWithinOneMinute ? 'FAIL' : 'ok  '} ` +
       `${(withinOne * 100).toFixed(1)}% of ${allChecks.length} checks within a minute ` +
-      `(needs ${(suite.minWithinOneMinute * 100).toFixed(0)}%)`,
+      `(needs ${(floor * 100).toFixed(0)}%)`,
   );
   for (const key of PRAYER_ORDER) {
     const values = overall[key];
@@ -165,6 +188,15 @@ for (const suite of SUITES) {
     );
   }
 }
+
+const LABEL: Record<Mode, string> = {
+  engine: 'computed from the sun',
+  timetable: 'shipped timetable',
+};
+
+for (const suite of SUITES) run(suite, 'engine');
+// The lookup path only has something to prove where a table actually ships.
+run(SUITES[0], 'timetable');
 
 console.log(
   failed
